@@ -1,0 +1,49 @@
+# Monthly review: runs at 08:00 IST on the 1st of every month, or on demand
+# (Actions tab → Monthly review → Run workflow, or the button on the dashboard's Settings page).
+name: Monthly review
+
+on:
+  schedule:
+    - cron: "30 2 1 * *"   # 02:30 UTC = 08:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Reuse downloaded prices and financials between runs, so later reviews are quicker.
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: market-data-${{ github.run_id }}
+          restore-keys: market-data-
+
+      - name: Run the review
+        run: python -m mypropicks review
+
+      - name: Save the results to the repo
+        run: |
+          git config user.name "MyProPicks review"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/reviews data/universe
+          git diff --cached --quiet && { echo "Nothing new"; exit 0; }
+          git commit -m "review: $(date -u +%Y-%m-%d)"
+          git pull --rebase
+          git push

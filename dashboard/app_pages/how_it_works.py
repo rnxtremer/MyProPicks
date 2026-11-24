@@ -1,0 +1,198 @@
+import pandas as pd
+import streamlit as st
+
+from common import PORTFOLIOS, config, footer
+from mypropicks.config import DISCLAIMER
+
+cfg = config()
+w = cfg["weights"]
+liq = cfg["liquidity_cr"]
+fv = cfg["fair_value"]
+UNIVERSE = {"nifty20": "Nifty 100", "midcap30": "Nifty Midcap 150", "smallcap50": "Nifty Smallcap 250"}
+
+st.title(":material/school: How MyProPicks works")
+st.markdown(
+    "MyProPicks is your own rules-based stock picker, modelled on ProPicks. Every month it ranks "
+    "every stock in three NSE indices, keeps the best ones in three model portfolios, and tells you "
+    "exactly which stocks to **sell** and which to **buy** so each portfolio stays complete."
+)
+st.markdown(":violet-badge[:material/rule: Fixed rules, no guesswork] "
+            ":blue-badge[:material/calendar_month: Reviewed on the 1st of every month] "
+            ":green-badge[:material/savings: Free data, no subscription] "
+            ":orange-badge[:material/person: You place the trades yourself]")
+
+# ---- the three portfolios ----
+st.subheader("The three portfolios")
+with st.container(horizontal=True):
+    for key, p in PORTFOLIOS.items():
+        with st.container(border=True):
+            st.markdown(f"#### {p['label']}")
+            st.markdown(f"**{p['n']} stocks** picked from the **{UNIVERSE.get(key, p['index_name'])}**")
+            st.caption(f"Liquidity floor: ₹{liq[key]} cr traded on a typical day")
+
+# ---- the monthly cycle ----
+st.subheader("The monthly cycle")
+steps = [
+    (":material/download:", "1. Fetch", "Downloads NSE's latest index lists, a year of prices and each company's financials."),
+    (":material/fact_check:", "2. Check", "Drops stocks that fail NSE-style trading checks."),
+    (":material/leaderboard:", "3. Score", "Scores every stock in 5 areas and ranks them."),
+    (":material/swap_horiz:", "4. Compare", "Compares the new top N with what you hold (or last month's list)."),
+    (":material/receipt_long:", "5. Report", "Writes the SELL and BUY list, with reasons and suggested quantities."),
+    (":material/edit_note:", "6. You act", "You place the trades with your broker and log them here."),
+]
+with st.container(horizontal=True):
+    for icon, title, text in steps:
+        with st.container(border=True, height="stretch"):
+            st.markdown(f"**{icon} {title}**")
+            st.caption(text)
+
+tabs = st.tabs([":material/fact_check: Eligibility", ":material/leaderboard: Scoring",
+                ":material/balance: Fair value", ":material/swap_horiz: Monthly changes",
+                ":material/account_balance_wallet: Your trades & P&L",
+                ":material/dashboard: Dashboard pages", ":material/info: Data & limits"])
+
+# ---- eligibility ----
+with tabs[0]:
+    st.markdown("Before any scoring, a stock must pass the same kind of checks NSE uses for its "
+                "indices. A stock that fails any of them is ranked **below every eligible stock**, "
+                "so it can't make the list.")
+    st.table({
+        ":material/list: In the index": "It's in NSE's current constituent list for that index",
+        ":material/history: Enough history": "At least 250 trading days (about a year) of prices",
+        ":material/event_available: Trades every day": "Traded on every one of the last 126 sessions (about 6 months)",
+        ":material/water_drop: Liquid enough": f"Median daily traded value over the last 63 sessions of at least "
+                                               f"₹{liq['nifty20']} cr (Nifty 20), ₹{liq['midcap30']} cr (Midcap 30), "
+                                               f"₹{liq['smallcap50']} cr (Smallcap 50)",
+    }, border="horizontal")
+    st.caption("Each portfolio is compared only with the other stocks in its own index.")
+
+# ---- scoring ----
+with tabs[1]:
+    st.markdown("Each eligible stock gets a **score from 0 to 100 in five areas**. Within an area, every "
+                "measure is turned into a percentile: 100 means the best in the index, 0 the worst. "
+                "The area score is the average of its measures, and the total is a weighted average "
+                "of the five areas.")
+    areas = pd.DataFrame([
+        ("Momentum", w["momentum"], "12-month return (skipping the last month), 6-month return, price vs its 200-day average, lower volatility"),
+        ("Profitability", w["profitability"], "Return on equity (ROE), return on capital (ROCE), operating margin, net margin"),
+        ("Growth", w["growth"], "3-year revenue growth, latest revenue growth, EPS growth, operating profit growth"),
+        ("Relative value", w["relative_value"], "Upside to fair value, P/E vs sector median, P/B vs sector median (cheaper is better)"),
+        ("Cash flow", w["cash_flow"], "Operating cash vs net profit, free-cash-flow yield, lower debt-to-equity, interest cover"),
+    ], columns=["Area", "Weight", "What it measures"]).sort_values("Weight", ascending=False)
+    areas["Weight"] = areas["Weight"] * 100
+    st.dataframe(areas, hide_index=True,
+                 column_config={"Weight": st.column_config.ProgressColumn("Weight", format="%.0f%%",
+                                                                          min_value=0, max_value=30),
+                                "What it measures": st.column_config.TextColumn(width="large")},
+                 alt="The five scoring areas and their weights")
+    c1, c2 = st.columns(2)
+    with c1.container(border=True, height="stretch"):
+        st.markdown("**:material/sort: How the rank is decided**")
+        st.markdown("- Highest total score is rank 1.\n"
+                    "- Ties go to the stronger momentum, then the bigger company.\n"
+                    "- Top 20 / 30 / 50 make the list.\n"
+                    "- **Health score** = total score ÷ 20, so it runs from 0 to 5.")
+    with c2.container(border=True, height="stretch"):
+        st.markdown("**:material/shield: Fairness rules**")
+        st.markdown("- Loss-makers (negative earnings or book value) score 0 on P/E and P/B.\n"
+                    "- If a whole area has no data, its weight is shared among the others.\n"
+                    "- Under 60% of measures available → the stock is flagged **low data**.")
+    st.caption("You can change the weights in `config.yaml` under `weights`.")
+
+# ---- fair value ----
+with tabs[2]:
+    st.markdown("Fair value is the **average of up to five valuation methods**, the same idea "
+                "InvestingPro describes for its own fair value.")
+    st.table({
+        "Sector P/E": "Earnings per share × the median P/E of its sector",
+        "Sector P/B": "Book value per share × the median P/B of its sector",
+        "Sector EV/EBITDA": "EBITDA × the sector's median EV/EBITDA, minus net debt, per share",
+        "Discounted cash flow": f"Free cash flow grown for {fv.get('dcf_years', 5)} years, discounted at "
+                                f"{fv['dcf_discount']:.0%}, with {fv['dcf_terminal']:.0%} growth after that",
+        "Analyst target": "The average analyst price target, when one exists",
+    }, border="horizontal")
+    c1, c2, c3 = st.columns(3)
+    with c1.container(border=True, height="stretch"):
+        st.markdown(":green-badge[:material/trending_up: Undervalued]")
+        st.caption(f"Price is more than {fv['band']:.0%} below fair value.")
+    with c2.container(border=True, height="stretch"):
+        st.markdown(":blue-badge[:material/balance: Fair]")
+        st.caption(f"Price is within ±{fv['band']:.0%} of fair value.")
+    with c3.container(border=True, height="stretch"):
+        st.markdown(":red-badge[:material/trending_down: Overvalued]")
+        st.caption(f"Price is more than {fv['band']:.0%} above fair value.")
+    st.markdown("- **Odd results are dropped:** with 3 or more methods, any method more than 3× or under ⅓ "
+                "of their median is ignored.\n"
+                "- **Banks and lenders** skip discounted cash flow and EV/EBITDA, because borrowing is "
+                "their raw material and those methods give nonsense for them.")
+
+# ---- monthly changes ----
+with tabs[3]:
+    st.markdown("On the 1st of each month the review builds the new top N and compares it with your "
+                "portfolio. The rules are strict and simple:")
+    c1, c2 = st.columns(2)
+    with c1.container(border=True, height="stretch"):
+        st.markdown("**:red[:material/remove_circle: A stock is sold when…]**")
+        st.markdown("- it has **dropped out of the top N** (no buffer — rank 21 in Nifty 20 is out),\n"
+                    "- it **failed an eligibility check**, or\n"
+                    "- it **left the index** altogether.")
+    with c2.container(border=True, height="stretch"):
+        st.markdown("**:green[:material/add_circle: A stock is bought when…]**")
+        st.markdown("- it's in the new top N and you don't hold it yet.\n"
+                    "- Buys are taken from the highest ranks first.")
+    st.info("The number of buys always equals the number of sells, plus any gap if the portfolio was "
+            "short. So the Nifty 20 always ends with 20 stocks, Midcap 30 with 30, Smallcap 50 with 50.",
+            title="The portfolio always stays complete", icon=":material/check_circle:")
+    st.markdown("**Example:** last month's Nifty 20 held stock A at rank 8. This month A ranks 24, so the "
+                "review says **SELL A — dropped to rank 24**, and **BUY** the highest-ranked stock in the new "
+                "top 20 that you don't own.")
+    st.markdown("**What it compares against:** the trades you've logged for that portfolio. If you "
+                "haven't logged any, it compares with last month's recommended list.")
+    st.markdown("**Safety nets:**\n"
+                "- If a held stock's price can't be downloaded, it's **kept** (not sold) and you get a warning.\n"
+                "- If fewer than N stocks are eligible, the list is filled with the next best and you're warned.\n"
+                "- With capital set in Settings, each buy gets a **suggested quantity**: the money for the "
+                "buys is split equally and rounded down to whole shares.")
+
+# ---- trades & P&L ----
+with tabs[4]:
+    st.markdown("MyProPicks never trades for you. You buy and sell with your own broker, then tell it "
+                "what you did, in either of two ways:")
+    c1, c2 = st.columns(2)
+    with c1.container(border=True, height="stretch"):
+        st.markdown("**:material/edit_note: On the dashboard**")
+        st.caption("Use the **Log a trade** page: portfolio, buy or sell, stock, quantity, price, charges.")
+    with c2.container(border=True, height="stretch"):
+        st.markdown("**:material/terminal: From the command line**")
+        st.caption("On your PC: `python -m mypropicks log --portfolio nifty20 --action BUY "
+                   "--symbol PNB --qty 100 --price 149.75`")
+    st.markdown("- **Average-cost method:** each buy updates your average price; sells book realised profit or loss.\n"
+                "- **Charges** (brokerage, taxes) reduce realised profit.\n"
+                "- **Cash** = starting capital − buys + sells − charges.\n"
+                "- **Checks:** you can't sell more than you held on that date, and bad input is refused "
+                "before anything is saved.")
+
+# ---- dashboard pages ----
+with tabs[5]:
+    st.table({
+        ":material/event: This month": "The latest review: what to sell, what to buy, and why",
+        ":material/analytics: Portfolio analysis": "Each current list with live price, fair value, valuation label, health and a detail card per stock",
+        ":material/account_balance_wallet: My holdings & P&L": "What you actually own, its value, profit or loss, and the value over time vs the index",
+        ":material/edit_note: Log a trade": "Record a buy or sell",
+        ":material/leaderboard: Full rankings": "Every stock in each index with every score",
+        ":material/settings: Settings & review": "Set your capital, run a review now, refresh the at-risk check",
+        ":material/school: How it works": "This page",
+    }, border="horizontal")
+
+# ---- data & limits ----
+with tabs[6]:
+    st.markdown("- **Index lists** come from NSE (niftyindices.com).\n"
+                "- **Prices and financials** come from Yahoo Finance, free and delayed by about 15 minutes.\n"
+                "- **Benchmarks:** Nifty 100, Nifty Midcap 150 and Nifty Smallcap 250.\n"
+                "- **Speed:** the first review downloads data for about 500 stocks and takes around 35–40 "
+                "minutes; later runs reuse cached data and take a few minutes.\n"
+                "- **Gaps:** free data sometimes misses a figure; such stocks are scored on what's "
+                "available and may be flagged low data.")
+    st.warning(DISCLAIMER, icon=":material/gavel:")
+
+footer()

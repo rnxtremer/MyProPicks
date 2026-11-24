@@ -1,0 +1,66 @@
+# MyProPicks theme: light and dark, switchable from the app menu (⋮ → Settings).
+
+[theme]
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "10px"
+buttonRadius = "8px"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap"
+baseFontSize = 14
+headingFontSizes = ["30px", "22px", "18px", "16px", "14px", "12px"]
+headingFontWeights = [700, 600, 600, 600, 500, 500]
+metricValueFontWeight = 600
+linkUnderline = false
+
+[theme.light]
+primaryColor = "#4F46E5"
+backgroundColor = "#F7F8FC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F172A"
+linkColor = "#4F46E5"
+borderColor = "#E2E8F0"
+grayColor = "#64748B"
+greenColor = "#16A34A"
+redColor = "#DC2626"
+yellowColor = "#CA8A04"
+orangeColor = "#EA580C"
+blueColor = "#2563EB"
+violetColor = "#7C3AED"
+chartCategoricalColors = ["#4F46E5", "#14B8A6", "#F59E0B", "#EC4899", "#0EA5E9", "#84CC16", "#A855F7", "#F97316"]
+dataframeBorderColor = "#E2E8F0"
+dataframeHeaderBackgroundColor = "#EEF2FF"
+
+[theme.light.sidebar]
+backgroundColor = "#1E1B4B"
+secondaryBackgroundColor = "#312E81"
+textColor = "#E0E7FF"
+borderColor = "#312E81"
+primaryColor = "#A5B4FC"
+linkColor = "#C7D2FE"
+
+[theme.dark]
+primaryColor = "#818CF8"
+backgroundColor = "#0B1020"
+secondaryBackgroundColor = "#151B2E"
+textColor = "#E2E8F0"
+linkColor = "#A5B4FC"
+borderColor = "#26304A"
+grayColor = "#94A3B8"
+greenColor = "#4ADE80"
+redColor = "#F87171"
+yellowColor = "#FACC15"
+orangeColor = "#FB923C"
+blueColor = "#60A5FA"
+violetColor = "#A78BFA"
+chartCategoricalColors = ["#818CF8", "#2DD4BF", "#FBBF24", "#F472B6", "#38BDF8", "#A3E635", "#C084FC", "#FB923C"]
+dataframeBorderColor = "#26304A"
+dataframeHeaderBackgroundColor = "#1B2340"
+
+[theme.dark.sidebar]
+backgroundColor = "#070B16"
+secondaryBackgroundColor = "#151B2E"
+textColor = "#E2E8F0"
+borderColor = "#1B2340"
+primaryColor = "#818CF8"
+linkColor = "#A5B4FC"
