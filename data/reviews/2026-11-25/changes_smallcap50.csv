@@ -1,0 +1,7 @@
+action,symbol,reason,qty,price
+SELL,BIRET,ineligible: not traded every day,,319.92999267578125
+SELL,CUB,dropped to rank 56,,247.0
+SELL,PNBHOUSING,dropped to rank 59,,1183.300048828125
+BUY,IEX,rank 36,,111.0
+BUY,HONASA,rank 47,,536.4500122070312
+BUY,NETWEB,rank 50,,4010.800048828125
