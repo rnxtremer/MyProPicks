@@ -105,3 +105,32 @@ def test_missing_next_price_counts_as_cash():
 def test_cagr():
     s = pd.Series([100.0, 121.0], index=pd.to_datetime(["2023-11-30", "2025-11-30"]))
     assert backtest.cagr(s) == pytest.approx(0.10, abs=1e-3)
+
+
+def test_backtest_carries_holdings_into_the_next_month(monkeypatch):
+    closes, vols, raws, ind, index = _world()
+    seen = []
+
+    def fake(*a, held=None, **k):
+        seen.append(list(held or []))
+        return ["S00"]
+    monkeypatch.setattr(backtest, "picks_on", fake)
+    backtest.run_backtest("nifty20", CFG, closes, vols, raws, ind, index, months=3, n=1)
+    assert seen == [[], ["S00"], ["S00"]]
+
+
+def test_backtest_lets_kept_stocks_run(monkeypatch):
+    """Like you'd actually trade: stocks that stay in the list aren't trimmed back each month."""
+    days = pd.bdate_range("2024-01-01", periods=70)
+    a = pd.Series([100.0] * 70, index=days)
+    a[days >= days[25]] = 200.0                      # A doubles in month 2, then stays flat
+    b = pd.Series([100.0] * 70, index=days)
+    b[days >= days[50]] = 50.0                       # B halves in month 3
+    closes = pd.DataFrame({"A": a, "B": b})
+    vols = pd.DataFrame(1e7, index=days, columns=closes.columns)
+    index = closes.mean(axis=1)
+    monkeypatch.setattr(backtest, "picks_on", lambda *a, **k: ["A", "B"])
+    out = backtest.run_backtest("nifty20", CFG, closes, vols, {}, pd.Series(dtype=str), index,
+                                months=3, n=2)
+    # Held 50/50 and never trimmed: A ends at 100 (50 doubled), B at 25: 125 in total.
+    assert out["ai"].iloc[-1] == pytest.approx(125.0)

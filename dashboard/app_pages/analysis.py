@@ -9,6 +9,7 @@ from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, foot
 from mypropicks.backtest import cagr
 from mypropicks.config import BENCHMARK_NAMES
 from mypropicks.fundamentals import quarterly_summary
+from mypropicks.review import keep_within
 
 VALUATIONS = ["Undervalued", "Fair", "Overvalued", "No data"]
 VAL_COLORS = ["green", "blue", "red", "gray"]
@@ -120,9 +121,11 @@ with st.container(horizontal=True):
     st.metric(":material/today: Avg day move", f"{avg_day:+.2%}" if pd.notna(avg_day) else "—",
               border=True)
 
-at_risk = df[df["live_rank"].notna() & (df["live_rank"] > n)]["symbol"].tolist()
+cutoff = keep_within(config(), pf)
+at_risk = df[df["live_rank"].notna() & (df["live_rank"] > cutoff)]["symbol"].tolist()
 if at_risk:
-    st.warning(f"{', '.join(at_risk)} would drop out if the review ran today.",
+    st.warning(f"{', '.join(at_risk)} would drop out if the review ran today "
+               f"(ranked below {cutoff}).",
                title="At risk of removal", icon=":material/warning:")
 
 # ---- how the AI did ----
@@ -170,7 +173,8 @@ with st.container(border=True):
                             f"held equally, and in the {bench}")
         st.caption(f"Simulated from {bt.index[0]:%b %Y} to {bt.index[-1]:%b %Y}: at each month-end the AI "
                    f"picks its top {n} using only the prices and published results available then, "
-                   "holds them equally for a month, and repeats. Because it uses today's index members, "
+                   "keeps each one until it falls below the holding buffer, and replaces leavers with "
+                   "the best new picks, splitting the money equally. Because it uses today's index members, "
                    "holds equal amounts and counts dividends (the index doesn't), even buying every member "
                    "beats the index — so compare the AI with the dashed **all members** line to see what "
                    "its choices added. No costs or taxes. Past results don't promise future returns.")

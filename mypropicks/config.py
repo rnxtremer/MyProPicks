@@ -77,6 +77,10 @@ DEFAULTS: dict = {
         "analyst_min": 5,
     },
     "low_data_threshold": 0.60,
+    # Holding buffer: a held stock stays until it falls below rank N + buffer x N (0.5 means
+    # ranks 30 / 45 / 75). Tested over 3 years with Indian costs and tax, it roughly halved the
+    # swaps and lifted the after-tax edge on average. 0 sells at rank N + 1.
+    "buffer": 0.5,
 }
 
 

@@ -2,7 +2,9 @@
 
 At each month-end the model ranks today's index members using only what it could have known
 then (prices up to that day, annual results published by then, no analyst targets), buys the
-top N in equal amounts and holds them to the next month-end. The result is compared with the
+top N in equal amounts. Each month after that it trades as the app tells you to: sells stocks
+that fell below the holding buffer, splits that money equally across the new picks, and leaves
+the stocks that stay untouched. The result is compared with the
 portfolio's index, both starting at 100, and with a fair yardstick: every one of today's index
 members held in equal amounts, rebalanced monthly. That yardstick shares the backtest's built-in
 advantages (today's members only, equal weights, dividends), so the gap between it and the AI is
@@ -22,7 +24,7 @@ import pandas as pd
 
 from . import fundamentals, prices, universe
 from .config import BENCHMARKS, PORTFOLIOS, data_dir
-from .review import decide_changes, rank_universe
+from .review import decide_changes, keep_within, rank_universe
 
 Progress = Callable[[str, float], None]
 HISTORY_MONTHS = 50  # 3 years of tests plus a year of history for the first one
@@ -46,8 +48,10 @@ def period_return(closes: pd.DataFrame, picks: list[str], start, end) -> float:
 
 
 def picks_on(portfolio: str, cfg: dict, when, closes: pd.DataFrame, vols: pd.DataFrame,
-             raws: dict[str, dict], industries: pd.Series, n: int) -> list[str]:
-    """The top N the model would have chosen on `when`, from data available then."""
+             raws: dict[str, dict], industries: pd.Series, n: int,
+             held: list[str] | None = None) -> list[str]:
+    """The list the model would have held on `when`, from data available then: the top N, with
+    stocks already held kept while they stay within the buffer, as the live review does."""
     c, v = closes.loc[:when], vols.loc[:when]
     price = c.ffill().iloc[-1]
     syms = [s for s in c.columns if pd.notna(price.get(s))]  # not listed yet: skip
@@ -61,7 +65,7 @@ def picks_on(portfolio: str, cfg: dict, when, closes: pd.DataFrame, vols: pd.Dat
     metrics["yahoo_sector"] = metrics["sector"]
     metrics["sector"] = industries.reindex(syms)
     table = rank_universe(metrics, c[syms], v[syms], cfg, portfolio)
-    return decide_changes(table, [], n)["new_list"]
+    return decide_changes(table, held or [], n, keep_within(cfg, portfolio))["new_list"]
 
 
 def run_backtest(portfolio: str, cfg: dict, closes: pd.DataFrame, vols: pd.DataFrame,
@@ -73,16 +77,30 @@ def run_backtest(portfolio: str, cfg: dict, closes: pd.DataFrame, vols: pd.DataF
     n = n or PORTFOLIOS[portfolio]["n"]
     dates = month_ends(closes.index)[-(months + 1):]
     idx = index.sort_index().ffill()
-    ai, every, rows = 100.0, 100.0, []
+    every, rows, held = 100.0, [], []
+    pos: dict[str, float] = {}        # rupees in each AI holding
+    cash = 100.0
     base = float(idx.asof(dates[0]))
     rows.append({"date": dates[0], "ai": 100.0, "baseline": 100.0, "index": 100.0})
     for i, (t0, t1) in enumerate(zip(dates[:-1], dates[1:])):
         if progress:
             progress(f"{PORTFOLIOS[portfolio]['label']}: backtest {t0.date()}", i / (len(dates) - 1))
-        picks = picks_on(portfolio, cfg, t0, closes, vols, raws, industries, n)
-        ai *= 1 + period_return(closes, picks, t0, t1)
+        picks = picks_on(portfolio, cfg, t0, closes, vols, raws, industries, n, held=held)
+        held = picks
+        # Trade as the app tells you to: sell what left the list, split the money equally across
+        # the new buys, and leave the stocks that stay untouched (no monthly trimming).
+        for s in [s for s in pos if s not in picks]:
+            cash += pos.pop(s)
+        buys = [s for s in picks if s not in pos and pd.notna(closes.at[t0, s])]
+        for s in buys:
+            pos[s] = cash / len(buys)
+        if buys:
+            cash = 0.0
+        for s in pos:
+            pos[s] *= 1 + period_return(closes, [s], t0, t1)
         listed = [s for s in closes.columns if pd.notna(closes.at[t0, s])]
-        every *= 1 + period_return(closes, listed, t0, t1)
+        every *= 1 + period_return(closes, listed, t0, t1)  # an index fund rebalances
+        ai = cash + sum(pos.values())
         rows.append({"date": t1, "ai": round(ai, 4), "baseline": round(every, 4),
                      "index": round(float(idx.asof(t1)) / base * 100, 4)})
     return pd.DataFrame(rows).set_index("date")

@@ -18,8 +18,17 @@ from .sizing import suggest_quantities
 Progress = Callable[[str, float], None]
 
 
-def decide_changes(ranked: pd.DataFrame, held: list[str], n: int) -> dict:
-    """No buffer: the new list is the top N. Buys = N - kept, so sells equal buys when you hold N."""
+def keep_within(cfg: dict, portfolio: str) -> int:
+    """The rank a held stock may fall to before it's sold: N plus the buffer (0.5 = 1.5 x N)."""
+    n = PORTFOLIOS[portfolio]["n"]
+    return n + round(n * float(cfg.get("buffer", 0) or 0))
+
+
+def decide_changes(ranked: pd.DataFrame, held: list[str], n: int, keep_within: int | None = None) -> dict:
+    """The new list: held stocks still ranked within `keep_within` (default N, i.e. no buffer),
+    topped up with the best-ranked stocks not held. Buys = N - kept, so sells equal buys when you
+    hold N. A buffer means fewer swaps: a stock isn't sold the moment it slips to rank N + 1."""
+    cutoff = max(keep_within or n, n)
     warnings: list[str] = []
     ranked = ranked.sort_values("rank")
     held = list(dict.fromkeys(held))
@@ -28,7 +37,11 @@ def decide_changes(ranked: pd.DataFrame, held: list[str], n: int) -> dict:
     for s in no_price:
         warnings.append(f"{s}: price data unavailable this month, so it is kept. Check it by hand.")
     eligible = [s for s in ranked[ranked["eligible"]].index if s not in no_price]
-    new_list = no_price[:n] + eligible[: max(n - len(no_price), 0)]
+    rank_of = {s: int(ranked.at[s, "rank"]) for s in eligible}
+    stay = sorted((s for s in held if s in rank_of and rank_of[s] <= cutoff), key=rank_of.get)
+    new_list = no_price[:n]
+    new_list += stay[: max(n - len(new_list), 0)]
+    new_list += [s for s in eligible if s not in new_list][: max(n - len(new_list), 0)]
     if len(new_list) < n:
         rest = [s for s in ranked.index if s not in new_list]
         # Prefer fill-ins that at least have a price.
@@ -37,6 +50,7 @@ def decide_changes(ranked: pd.DataFrame, held: list[str], n: int) -> dict:
         warnings.append(f"Warning: only {len(eligible)} eligible stocks; filled {len(extra)} from "
                         f"the next-best ineligible ones: {', '.join(extra)}.")
         new_list += extra
+    new_list.sort(key=lambda s: int(ranked.at[s, "rank"]))
 
     sell = []
     for s in held:
@@ -46,8 +60,10 @@ def decide_changes(ranked: pd.DataFrame, held: list[str], n: int) -> dict:
             reason = "left universe"
         elif not bool(ranked.at[s, "eligible"]):
             reason = f"ineligible: {ranked.at[s, 'reason']}"
+        elif int(ranked.at[s, "rank"]) > cutoff:
+            reason = f"dropped to rank {int(ranked.at[s, 'rank'])}" + (f" (below {cutoff})" if cutoff > n else "")
         else:
-            reason = f"dropped to rank {int(ranked.at[s, 'rank'])}"
+            reason = f"rank {int(ranked.at[s, 'rank'])}: list already full"
         sell.append((s, reason))
     keep = [s for s in held if s in new_list]
     buy = [s for s in new_list if s not in held]
@@ -57,7 +73,6 @@ def decide_changes(ranked: pd.DataFrame, held: list[str], n: int) -> dict:
     if len(held) > n:
         warnings.append(f"The portfolio held {len(held)} stocks, more than {n}.")
     return {"new_list": new_list, "sell": sell, "buy": buy, "keep": keep, "warnings": warnings}
-
 
 def _change_rows(table: pd.DataFrame, ch: dict, sell_qty: dict, buy_qty: dict) -> list[dict]:
     ltp = table["ltp"].to_dict()
@@ -69,7 +84,7 @@ def _change_rows(table: pd.DataFrame, ch: dict, sell_qty: dict, buy_qty: dict) -
 
 
 def personal_changes(table: pd.DataFrame, trades: pd.DataFrame, portfolio: str,
-                     capital: float) -> tuple[list[dict], list[str]]:
+                     capital: float, cutoff: int | None = None) -> tuple[list[dict], list[str]]:
     """Your own SELL/BUY list for one portfolio, from a review's rankings and your trades.
 
     Sells are everything you hold that left the top N. Buys get suggested quantities: with no
@@ -78,7 +93,9 @@ def personal_changes(table: pd.DataFrame, trades: pd.DataFrame, portfolio: str,
     """
     n = PORTFOLIOS[portfolio]["n"]
     held = ledger.held_symbols(trades, portfolio)
-    ch = decide_changes(table, held, n)
+    if cutoff is None:
+        cutoff = keep_within(load_config(), portfolio)
+    ch = decide_changes(table, held, n, cutoff)
     ltp = {k: v for k, v in table["ltp"].to_dict().items() if v == v}
     h = ledger.holdings(trades, portfolio).set_index("symbol")
     if held:
@@ -221,7 +238,7 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
         # your trades or capital, because review results are saved to a public repo. Your own
         # moves and quantities are worked out by personal_changes(), shown on the holdings page.
         basis = "last month's list" if prev_list else "nothing (first run)"
-        ch = decide_changes(table, prev_list, n)
+        ch = decide_changes(table, prev_list, n, keep_within(cfg, pf))
 
         ltp = table["ltp"].to_dict()
         lst = pd.DataFrame({"symbol": ch["new_list"]})

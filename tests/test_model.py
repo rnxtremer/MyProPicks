@@ -166,3 +166,16 @@ def test_momentum_metrics():
     c, _ = _px(n=300, start=100, end=200)
     mm = momentum_metrics(pd.DataFrame({"X": c}))
     assert mm.at["X", "mom_12_1"] > 0 and mm.at["X", "mom_6"] > 0 and mm.at["X", "vs_200dma"] > 0
+
+
+def test_market_wide_data_glitch_day_is_ignored():
+    """Yahoo sometimes shows zero volume for nearly every stock on one day (e.g. 18 Mar 2025).
+    That's bad data, not every stock stopping trading: it mustn't fail the traded-every-day check."""
+    cols = {f"S{i}": _px() for i in range(10)}
+    closes = pd.DataFrame({k: c for k, (c, v) in cols.items()})
+    vols = pd.DataFrame({k: v for k, (c, v) in cols.items()})
+    vols.iloc[-30] = 0                 # glitch: the whole market shows no volume that day
+    vols.iloc[-10, 0] = 0              # S0 genuinely didn't trade on another day
+    e = check_eligibility(closes, vols, {k: 1e6 for k in cols}, liquidity_cr=2)
+    assert e.at["S0", "reason"] == "not traded every day"
+    assert e.drop(index="S0")["eligible"].all()

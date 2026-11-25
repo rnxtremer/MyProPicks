@@ -9,6 +9,22 @@ from __future__ import annotations
 import pandas as pd
 
 
+def _drop_glitch_days(closes: pd.DataFrame, volumes: pd.DataFrame,
+                      share: float = 0.5, min_stocks: int = 5) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Drop days when most of the market shows no price or no volume.
+
+    Free data sometimes reports zero volume for nearly every stock on one day (Yahoo did on
+    18 March 2025). That's bad data, not the whole market stopping trading, and left in it would
+    fail every stock's traded-every-day check for the next six months.
+    """
+    if closes.shape[1] < min_stocks or volumes.empty:
+        return closes, volumes
+    v = volumes.reindex(index=closes.index, columns=closes.columns)
+    missing = closes.isna() | v.isna() | (v <= 0)
+    bad = missing.mean(axis=1) > share
+    return closes.loc[~bad], volumes.loc[volumes.index.isin(closes.index[~bad])]
+
+
 def check_eligibility(
     closes: pd.DataFrame,
     volumes: pd.DataFrame,
@@ -18,6 +34,7 @@ def check_eligibility(
     traded_window: int = 126,
     liquidity_window: int = 63,
 ) -> pd.DataFrame:
+    closes, volumes = _drop_glitch_days(closes, volumes)
     rows = {}
     for sym in closes.columns:
         c = closes[sym]

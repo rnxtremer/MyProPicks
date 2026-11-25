@@ -153,9 +153,11 @@ than 10% above it, fair otherwise (band in config). Each label shows how many me
 based on.
 
 ### 6.3 Monthly review rule (as the owner decided)
-- No buffer. A held stock stays only if it is still in the top N this month.
-- SELL = held stocks not in the top N (including ones that left the universe or failed a
-  filter).
+- Holding buffer (`buffer: 0.5` in config): a held stock stays while it ranks within
+  N × 1.5 (rank 30 / 45 / 75). Originally there was no buffer; a 3-year test with Indian
+  costs and tax (Nov 2026) showed the buffer roughly halved swaps, about doubled the average
+  holding period and improved the after-tax edge on average, so the owner adopted it.
+- SELL = held stocks ranked below the buffer cut-off, ineligible, or no longer in the universe.
 - BUY = the highest-ranked stocks not held. **The number of BUYs always equals the number of
   SELLs**, so the portfolio stays at exactly N (for example, 4 out means 4 in). The one
   exception: if a portfolio is already short (say a stock was delisted or merged), the
@@ -231,7 +233,7 @@ list and of the data.
 | Change since added % | From the close on the review day the stock entered the list |
 | Fair value, upside/downside %, label | **Undervalued / Fair / Overvalued**, colour-coded, with the method count |
 | Financial Health score (0–5) | With the five category scores on the detail card |
-| Live rank in universe | Warns **"At risk"** if the stock would currently fall outside the top N, so you see removals coming before the 1st |
+| Live rank in universe | Warns **"At risk"** if the stock would currently fall below the buffer cut-off, so you see removals coming before the 1st |
 | P/E, P/B, ROE, debt/equity, dividend yield | vs sector median on the detail card |
 | Market cap | |
 | 52-week high/low and distance from each | |

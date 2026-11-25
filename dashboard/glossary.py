@@ -11,7 +11,7 @@ Fields per entry (all text, all optional except term, group and what):
 - example: a worked example with numbers
 - metric:  the scoring measure it explains; the Info page adds its share of the total score
 
-{weights} and {liquidity} in any text are filled in from the current settings.
+{weights}, {liquidity} and {cutoffs} in any text are filled in from the current settings.
 """
 
 GROUPS = [
@@ -159,8 +159,24 @@ TERMS: list[dict] = [
          how="Eligible stocks come first, ordered by total score. Ties go to the stronger momentum, then "
              "the bigger company.",
          high="A low number (near 1) is good: top of the class.",
-         low="A number above 20 / 30 / 50 means the stock is outside the list.",
-         matters="The top 20 / 30 / 50 make the list. There's no buffer: rank 21 in the Nifty 100 is out."),
+         low="Above 20 / 30 / 50: not bought. A stock already held is kept down to rank {cutoffs}.",
+         matters="New stocks join from the top 20 / 30 / 50. A stock already in the list stays until it "
+                 "falls below the holding buffer ({cutoffs})."),
+    dict(group="ranking", term="Holding buffer",
+         what="A safety margin that stops the AI selling a stock the moment it slips just outside the "
+              "list. A held stock stays until it falls clearly below the cut-off.",
+         how="Held stocks are kept while they rank within N × 1.5: rank {cutoffs}. New stocks still "
+             "come from the very top.",
+         high="A wider buffer: fewer swaps, lower costs, more gains held over a year (taxed less), but "
+              "weaker stocks are kept longer.",
+         low="No buffer: the list always holds the current top N, but swaps more often, with more "
+             "costs and short-term tax.",
+         good="1.5 × N worked well in our 3-year test: about half the swaps, average holding about a "
+              "year, and a better result after costs and tax on average.",
+         price="It doesn't move prices; it changes how often you trade, which changes what you keep.",
+         matters="Used by the monthly review, by your own moves and by the 3-year backtest.",
+         example="In the Nifty 20, a stock that slips from rank 8 to rank 24 is kept. One that falls to "
+                 "rank 35 is sold."),
     dict(group="ranking", term="Eligible",
          what="Whether a stock passes basic trading checks, the same kind NSE uses for its indices. It "
               "keeps out stocks that are hard to buy and sell, or too new to judge.",
@@ -462,7 +478,8 @@ TERMS: list[dict] = [
          what="A test of the AI on the past 3 years: what ₹100 would have grown to if you had followed "
               "its picks every month.",
          how="At each month-end it ranks stocks using only the prices and results available then, buys "
-             "the top N equally, holds them for a month, and repeats.",
+             "the top N; each month after that, it sells stocks that fell below the holding buffer and "
+             "buys the best new ones with that money, leaving the rest untouched.",
          good="A good result beats the dashed all-members line, not just the index.",
          matters="Shows whether the rules have worked. Past results don't promise future returns."),
     dict(group="performance", term="All members, equal weight",
@@ -559,9 +576,9 @@ RANGES: dict[str, list[tuple[str, str, str]]] = {
                     ("55 – 70", "Good", "blue"), ("Over 70", "Strong", "green")],
     "Health score": [("Under 2", "Weak", "red"), ("2 – 2.75", "Average", "orange"),
                      ("2.75 – 3.5", "Good", "blue"), ("Over 3.5", "Strong", "green")],
-    "Rank": [("Inside the top 20 / 30 / 50", "In the list", "green"),
-             ("Up to 10 places outside", "Close, next in line", "orange"),
-             ("More than 10 places outside", "Out", "red")],
+    "Rank": [("Top 20 / 30 / 50", "Joins or stays in the list", "green"),
+             ("Down to rank 30 / 45 / 75", "Kept if already held", "orange"),
+             ("Below rank 30 / 45 / 75", "Sold", "red")],
     "Low data": [("Under 60% of measures", "Low data: less reliable", "red"),
                  ("60% or more", "Enough data", "green")],
     "Since added": [("Below −15%", "Struggling", "red"), ("−15% to +10%", "Normal swings", "blue"),

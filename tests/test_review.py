@@ -144,3 +144,55 @@ def test_personal_changes_use_holdings_and_cash(tmp_data, monkeypatch):
     buys = [r for r in rows if r["action"] == "BUY"]
     assert [(r["symbol"], r["reason"], r["qty"]) for r in sells] == [("OLDCO", "left universe", 5)]
     assert len(buys) == 20 and all(r["qty"] >= 0 for r in buys)
+
+
+# ---------- holding buffer ----------
+
+def test_buffer_keeps_a_held_stock_until_it_falls_below_the_cutoff():
+    """Held S24 (rank 25) stays with a cutoff of 30; S34 (rank 35) is sold; the list stays at 20."""
+    held = [f"S{i:02d}" for i in range(18)] + ["S24", "S34"]
+    r = decide_changes(_ranked(60), held, 20, keep_within=30)
+    assert "S24" in r["keep"]
+    assert r["sell"] == [("S34", "dropped to rank 35 (below 30)")]
+    assert r["buy"] == ["S18"]                       # best-ranked stock not held
+    assert len(r["new_list"]) == 20 and len(r["buy"]) == len(r["sell"])
+
+
+def test_buffer_never_keeps_more_than_n():
+    held = [f"S{i:02d}" for i in range(25)]          # 25 held, all within the cutoff
+    r = decide_changes(_ranked(60), held, 20, keep_within=30)
+    assert len(r["new_list"]) == 20 and r["buy"] == []
+    assert [s for s, _ in r["sell"]] == [f"S{i:02d}" for i in range(20, 25)]
+
+
+def test_buffer_still_sells_ineligible_stocks():
+    ranked = _ranked(60)
+    ranked.loc["S05", ["eligible", "reason"]] = [False, "low liquidity"]
+    held = [f"S{i:02d}" for i in range(20)]
+    r = decide_changes(ranked, held, 20, keep_within=30)
+    assert ("S05", "ineligible: low liquidity") in r["sell"]
+
+
+def test_no_buffer_is_the_old_rule():
+    held = [f"S{i:02d}" for i in range(18)] + ["S24", "S34"]
+    assert decide_changes(_ranked(60), held, 20)["new_list"] == \
+        decide_changes(_ranked(60), held, 20, keep_within=20)["new_list"]
+
+
+def test_buffer_cutoff_from_config():
+    from mypropicks.config import DEFAULTS
+    assert review.keep_within(DEFAULTS, "nifty20") == 30
+    assert review.keep_within(DEFAULTS, "midcap30") == 45
+    assert review.keep_within(DEFAULTS, "smallcap50") == 75
+
+
+def test_your_moves_use_the_buffer(tmp_data):
+    """You hold a stock now ranked 25: with the default buffer (sell below 30) it isn't sold."""
+    table = _ranked(60).assign(ltp=100.0)
+    for s in [f"S{i:02d}" for i in range(19)] + ["S24"]:
+        ledger.append_trade("2026-11-02", "nifty20", s, "BUY", 1, 100)
+    rows, _ = review.personal_changes(table, ledger.load_trades(), "nifty20", 0)
+    assert [r for r in rows if r["action"] == "SELL"] == []
+    assert [r["symbol"] for r in rows if r["action"] == "BUY"] == []
+    rows, _ = review.personal_changes(table, ledger.load_trades(), "nifty20", 0, cutoff=20)
+    assert [r["symbol"] for r in rows if r["action"] == "SELL"] == ["S24"]

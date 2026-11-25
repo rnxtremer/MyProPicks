@@ -2,6 +2,7 @@ import streamlit as st
 
 from common import config, footer
 from glossary import GROUPS, TERMS
+from mypropicks.review import keep_within
 from mypropicks.scoring import CATEGORIES
 
 cfg = config()
@@ -14,6 +15,7 @@ FILL = {
                          sorted(weights.items(), key=lambda kv: -kv[1])),
     "liquidity": f"₹{liq['nifty20']} cr for the Nifty 100, ₹{liq['midcap30']} cr Midcap, "
                  f"₹{liq['smallcap50']} cr Smallcap",
+    "cutoffs": " / ".join(str(keep_within(cfg, k)) for k in ("nifty20", "midcap30", "smallcap50")),
 }
 
 

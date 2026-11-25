@@ -3,6 +3,7 @@ import streamlit as st
 
 from common import PORTFOLIOS, config, footer
 from mypropicks.config import DISCLAIMER
+from mypropicks.review import keep_within
 
 cfg = config()
 w = cfg["weights"]
@@ -148,19 +149,30 @@ with tabs[3]:
     c1, c2 = st.columns(2)
     with c1.container(border=True, height="stretch"):
         st.markdown("**:red[:material/remove_circle: A stock is sold when…]**")
-        st.markdown("- it has **dropped out of the top N** (no buffer — rank 21 in Nifty 20 is out),\n"
+        st.markdown(f"- it has **fallen below rank {keep_within(cfg, 'nifty20')} / "
+                    f"{keep_within(cfg, 'midcap30')} / {keep_within(cfg, 'smallcap50')}** "
+                    "(the holding buffer, see below),\n"
                     "- it **failed an eligibility check**, or\n"
                     "- it **left the index** altogether.")
     with c2.container(border=True, height="stretch"):
         st.markdown("**:green[:material/add_circle: A stock is bought when…]**")
         st.markdown("- it's in the new top N and you don't hold it yet.\n"
                     "- Buys are taken from the highest ranks first.")
+    st.markdown(f"**:material/shield: The holding buffer.** A stock that's already in the list isn't "
+                f"sold the moment it slips to rank 21. It stays until it falls below rank "
+                f"**{keep_within(cfg, 'nifty20')}** (Nifty 20), **{keep_within(cfg, 'midcap30')}** "
+                f"(Midcap 30) or **{keep_within(cfg, 'smallcap50')}** (Smallcap 50). New stocks still "
+                "come from the very top. Tested over 3 years with Indian trading costs and tax, this "
+                "roughly halved the number of swaps, kept stocks about a year instead of six months "
+                "(so more gains are taxed as long-term, at 12.5% instead of 20%), and improved the "
+                "after-tax result on average.")
     st.info("The number of buys always equals the number of sells, plus any gap if the portfolio was "
             "short. So the Nifty 20 always ends with 20 stocks, Midcap 30 with 30, Smallcap 50 with 50.",
             title="The portfolio always stays complete", icon=":material/check_circle:")
-    st.markdown("**Example:** last month's Nifty 20 held stock A at rank 8. This month A ranks 24, so the "
-                "review says **SELL A — dropped to rank 24**, and **BUY** the highest-ranked stock in the new "
-                "top 20 that you don't own.")
+    st.markdown(f"**Example:** last month's Nifty 20 held stock A at rank 8. This month A ranks 24: "
+                f"still within the buffer, so it's **kept**. If it had fallen to rank 35, the review "
+                f"would say **SELL A — dropped to rank 35 (below {keep_within(cfg, 'nifty20')})** and "
+                "**BUY** the highest-ranked stock you don't own.")
     st.markdown("**What it compares against:** the review itself always compares with last month's "
                 "list, so the published lists are the model portfolio. **Your moves** on the "
                 "*My holdings & P&L* page compare the new list with the stocks you actually hold.")
@@ -179,7 +191,8 @@ with tabs[4]:
     with c1.container(border=True, height="stretch"):
         st.markdown("**:violet[:material/smart_toy: The AI line]**")
         st.caption("At each month-end it ranks the stocks using only the prices and annual results "
-                   "available on that date, buys the top 20 / 30 / 50 equally and holds them for a month.")
+                   "available on that date. It sells stocks that fell below the holding buffer, buys the "
+                   "best new ones with that money, and leaves the rest untouched, as you would.")
     with c2.container(border=True, height="stretch"):
         st.markdown("**:orange[:material/groups: All members (dashed)]**")
         st.caption("Buys every one of today's index members equally, with no choosing at all. It's the "
