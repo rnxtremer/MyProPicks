@@ -101,6 +101,7 @@ def latest_quotes(symbols: list[str]) -> dict[str, dict]:
     for sym in symbols:
         try:
             df = _download_one(sym, 1)
+            df = df[df["Close"].notna() & (df["Close"] > 0)]  # Yahoo sometimes sends a blank last row
             if len(df) >= 2:
                 last, prev = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
                 out[sym] = {"ltp": last, "change_pct": last / prev - 1, "as_of": str(df.index[-1].date())}

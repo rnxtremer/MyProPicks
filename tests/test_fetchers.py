@@ -154,3 +154,13 @@ def test_old_cache_without_price_history_is_refetched(tmp_data, monkeypatch):
     fresh = {**_hist_raw(), "info": {"marketCap": 2}}
     monkeypatch.setattr(fundamentals, "_download", lambda s: fresh)
     assert fundamentals.get_fundamentals("TCS")["info"]["marketCap"] == 2
+
+
+def test_latest_quotes_skips_blank_last_row(monkeypatch):
+    df = pd.DataFrame({"Close": [100.0, 110.0, np.nan], "Volume": [1, 1, 1]},
+                      index=pd.to_datetime(["2026-11-20", "2026-11-23", "2026-11-25"]))
+    monkeypatch.setattr(prices, "_download_one", lambda sym, months: df)
+    q = prices.latest_quotes(["PNB"])["PNB"]
+    assert q["ltp"] == 110.0
+    assert q["change_pct"] == pytest.approx(0.10)
+    assert q["as_of"] == "2026-11-23"

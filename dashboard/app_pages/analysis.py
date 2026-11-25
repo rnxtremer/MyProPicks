@@ -67,7 +67,9 @@ rows = []
 for r in lst.itertuples():
     s = r.symbol
     k = rk.loc[s] if s in rk.index else pd.Series(dtype=object)
-    ltp = q.get(s, {}).get("ltp", k.get("ltp"))
+    ltp = q.get(s, {}).get("ltp")
+    if not (pd.notna(ltp) and ltp > 0):           # no live price: use the review's
+        ltp = k.get("ltp")
     fv = k.get("fair_value")
     has = pd.notna(fv) and pd.notna(ltp) and ltp > 0
     if not has:
@@ -106,6 +108,9 @@ for r in lst.itertuples():
         "from_52w_low": (ltp / lo - 1) if lo and ltp else None,
     })
 df = pd.DataFrame(rows)
+for c in ("ltp", "day_chg", "since_added", "fair_value", "upside", "health", "live_rank", "pe", "pb",
+          "roe", "debt_equity", "div_yield", "mcap_cr", "from_52w_high", "from_52w_low"):
+    df[c] = pd.to_numeric(df[c], errors="coerce")  # all-blank columns would otherwise break sorting
 
 # ---- summary strip ----
 counts = df["valuation"].value_counts()

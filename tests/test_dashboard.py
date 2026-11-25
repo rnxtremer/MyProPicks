@@ -92,3 +92,22 @@ def test_theme_file_is_valid():
     cfg = tomllib.loads((Path(__file__).resolve().parents[1] / "dashboard/.streamlit/config.toml")
                         .read_text(encoding="utf-8"))
     assert cfg["theme"]["metricValueFontSize"] == "1.6rem"
+
+
+def test_analysis_survives_missing_prices(fake_world, monkeypatch):
+    """Yahoo sometimes sends no usable price at all: the page must still render."""
+    import glob
+    import streamlit as st
+    import sys
+    from mypropicks import prices
+    blank = lambda syms: {s: {"ltp": float("nan"), "change_pct": float("nan")} for s in syms}  # noqa: E731
+    monkeypatch.setattr(prices, "latest_quotes", blank)
+    if "common" in sys.modules:                    # the page's own copy, if already imported
+        monkeypatch.setattr(sys.modules["common"], "latest_quotes", blank)
+    for f in glob.glob(str(fake_world / "reviews" / "*" / "rankings_nifty20.csv")):
+        rk = pd.read_csv(f)
+        rk["ltp"] = None
+        rk.to_csv(f, index=False)
+    st.cache_data.clear()
+    at = _run("app_pages/analysis.py")
+    assert not at.exception, [e.message for e in at.exception]
