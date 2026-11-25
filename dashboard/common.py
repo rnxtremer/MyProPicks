@@ -146,6 +146,14 @@ def load_rankings(folder: str, pf: str) -> pd.DataFrame | None:
     return pd.read_csv(f, index_col=0) if f.exists() else None
 
 
+@st.cache_data(ttl=300)
+def load_backtest(pf: str) -> pd.DataFrame | None:
+    """The 3-year AI vs index replay saved by the monthly review (None if not run yet)."""
+    from mypropicks.backtest import result_file
+    f = result_file(pf)
+    return pd.read_csv(f, index_col=0, parse_dates=True) if f.exists() else None
+
+
 def snapshot_file(pf: str) -> Path:
     return data_dir() / "snapshots" / f"rankings_{pf}.csv"
 

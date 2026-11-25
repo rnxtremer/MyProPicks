@@ -5,7 +5,9 @@ import pandas as pd
 import streamlit as st
 
 from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, footer, fundamentals_raw,
-                    load_review_file, price_histories, quotes, snapshot_file)
+                    load_backtest, load_review_file, price_histories, quotes, snapshot_file)
+from mypropicks.backtest import cagr
+from mypropicks.config import BENCHMARK_NAMES
 from mypropicks.fundamentals import quarterly_summary
 
 VALUATIONS = ["Undervalued", "Fair", "Overvalued", "No data"]
@@ -122,6 +124,56 @@ at_risk = df[df["live_rank"].notna() & (df["live_rank"] > n)]["symbol"].tolist()
 if at_risk:
     st.warning(f"{', '.join(at_risk)} would drop out if the review ran today.",
                title="At risk of removal", icon=":material/warning:")
+
+# ---- how the AI did ----
+with st.container(border=True):
+    bench = BENCHMARK_NAMES[pf]
+    st.markdown(f"**:material/show_chart: How the AI did: {PF_LABELS[pf]} vs {bench}**")
+    bt = load_backtest(pf)
+    if bt is None or len(bt) < 2:
+        st.caption("The 3-year comparison appears after the next monthly review.")
+    else:
+        ai_name, all_name = f"AI {PF_LABELS[pf]}", "All index members, equal weight"
+        has_base = "baseline" in bt
+        ai_c, ix_c = cagr(bt["ai"]), cagr(bt["index"])
+        base_c = cagr(bt["baseline"]) if has_base else None
+        years = (bt.index[-1] - bt.index[0]).days / 365.25
+        span = f"Average yearly growth over {years:.1f} years"
+        with st.container(horizontal=True):
+            st.metric(":material/smart_toy: AI CAGR", f"{ai_c:+.1%}", border=True, help=span)
+            st.metric(f":material/account_balance: {bench} CAGR", f"{ix_c:+.1%}", border=True, help=span)
+            if has_base:
+                st.metric(":material/groups: All members CAGR", f"{base_c:+.1%}", border=True,
+                          help=f"{span}, holding every one of today's index members in equal amounts. "
+                               "It shares the simulation's advantages, so it's the fair yardstick.")
+                st.metric(":material/insights: AI's real edge", f"{(ai_c - base_c) * 100:+.1f} pts a year",
+                          border=True, help="AI CAGR minus the all-members CAGR: what the AI's choices added")
+            else:
+                st.metric(":material/compare_arrows: Difference", f"{(ai_c - ix_c) * 100:+.1f} pts a year",
+                          border=True, help="AI CAGR minus index CAGR, in percentage points")
+        names = {"ai": ai_name, "baseline": all_name, "index": bench}
+        order = [names[c] for c in ("ai", "baseline", "index") if c in bt]
+        long = bt.rename(columns=names).reset_index(names="Date").melt(
+            "Date", var_name="Series", value_name="Value")
+        chart = alt.Chart(long).mark_line(strokeWidth=2.5).encode(
+            x=alt.X("Date:T", title=None),
+            y=alt.Y("Value:Q", title="Value of ₹100", scale=alt.Scale(zero=False)),
+            color=alt.Color("Series:N", title=None, sort=order, legend=alt.Legend(orient="top", labelLimit=300),
+                            scale=alt.Scale(domain=order, range=["#6366F1", "#F59E0B", "#94A3B8"][:len(order)])),
+            strokeDash=alt.StrokeDash("Series:N", sort=order, legend=None,
+                                      scale=alt.Scale(domain=order, range=[[1, 0], [6, 4], [1, 0]][:len(order)])),
+            tooltip=[alt.Tooltip("Date:T", format="%b %Y"), "Series:N",
+                     alt.Tooltip("Value:Q", format=",.1f")],
+        )
+        st.altair_chart(chart.properties(height=320),
+                        alt=f"Value of 100 rupees in the AI's {PF_LABELS[pf]} picks, in all index members "
+                            f"held equally, and in the {bench}")
+        st.caption(f"Simulated from {bt.index[0]:%b %Y} to {bt.index[-1]:%b %Y}: at each month-end the AI "
+                   f"picks its top {n} using only the prices and published results available then, "
+                   "holds them equally for a month, and repeats. Because it uses today's index members, "
+                   "holds equal amounts and counts dividends (the index doesn't), even buying every member "
+                   "beats the index — so compare the AI with the dashed **all members** line to see what "
+                   "its choices added. No costs or taxes. Past results don't promise future returns.")
 
 # ---- main table ----
 view = df.copy()

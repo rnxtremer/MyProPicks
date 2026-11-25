@@ -37,9 +37,14 @@ PORTFOLIOS: dict[str, dict] = {
 
 # Yahoo Finance tickers for each portfolio's comparison index (checked during the build).
 BENCHMARKS: dict[str, str] = {
-    "nifty20": "^CNX100",
+    "nifty20": "^NSEI",
     "midcap30": "NIFTYMIDCAP150.NS",
     "smallcap50": "NIFTYSMLCAP250.NS",
+}
+BENCHMARK_NAMES: dict[str, str] = {
+    "nifty20": "Nifty 50",
+    "midcap30": "Nifty Midcap 150",
+    "smallcap50": "Nifty Smallcap 250",
 }
 
 DEFAULTS: dict = {

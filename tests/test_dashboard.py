@@ -45,3 +45,20 @@ def test_empty_state(tmp_data):
     at = _run("app_pages/analysis.py")
     assert not at.exception
     assert any("No list yet" in (i.title or "") or "first review" in i.value for i in at.info)
+
+
+def test_analysis_shows_ai_vs_index(fake_world):
+    f = fake_world / "backtest" / "nifty20.csv"
+    f.parent.mkdir(parents=True)
+    pd.DataFrame({"date": ["2023-11-30", "2024-11-29", "2025-11-28"], "ai": [100.0, 121.0, 146.41],
+                  "baseline": [100.0, 115.0, 132.25], "index": [100.0, 110.0, 121.0]}).to_csv(f, index=False)
+    import streamlit as st
+    st.cache_data.clear()  # earlier page tests cached "no backtest yet"
+    at = _run("app_pages/analysis.py")
+    assert not at.exception, [e.message for e in at.exception]
+    labels = [m.label for m in at.metric]
+    assert any("AI CAGR" in x for x in labels) and any("Nifty 50 CAGR" in x for x in labels)
+    ai = next(m for m in at.metric if "AI CAGR" in m.label)
+    assert ai.value == "+21.0%"
+    edge = next(m for m in at.metric if "real edge" in m.label)
+    assert edge.value == "+6.0 pts a year"  # 21% vs 15% a year

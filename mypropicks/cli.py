@@ -1,4 +1,4 @@
-"""Command line: review, log, status."""
+"""Command line: review, backtest, log, status."""
 from __future__ import annotations
 
 import argparse
@@ -19,6 +19,23 @@ def _cmd_review(a) -> int:
                      portfolios=[a.portfolio] if a.portfolio else None, progress=prog)
     print(f"\nReview written to {out}")
     print((out / "summary.md").read_text(encoding="utf-8"))
+    return 0
+
+
+def _cmd_backtest(a) -> int:
+    import pandas as pd
+
+    from .backtest import build, cagr
+
+    def prog(stage, frac):
+        print(f"\r{stage:<70}", end="", flush=True)
+
+    cfg = load_config()
+    for pf in [a.portfolio] if a.portfolio else list(PORTFOLIOS):
+        f = build(pf, cfg, progress=prog)
+        df = pd.read_csv(f, index_col=0, parse_dates=True)
+        ai, bl, ix = cagr(df["ai"]), cagr(df["baseline"]), cagr(df["index"])
+        print(f"\n{PORTFOLIOS[pf]['label']}: AI {ai:+.1%} a year, all members {bl:+.1%}, index {ix:+.1%} -> {f}")
     return 0
 
 
@@ -64,6 +81,10 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--date", help="review date YYYY-MM-DD (default today)")
     r.add_argument("--portfolio", choices=list(PORTFOLIOS))
     r.set_defaults(fn=_cmd_review)
+
+    b = sub.add_parser("backtest", help="replay the model over the last 3 years vs its index")
+    b.add_argument("--portfolio", choices=list(PORTFOLIOS))
+    b.set_defaults(fn=_cmd_backtest)
 
     lg = sub.add_parser("log", help="record a trade you placed")
     lg.add_argument("--portfolio", required=True)

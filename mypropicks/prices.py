@@ -26,8 +26,8 @@ def _download_one(symbol: str, months: int) -> pd.DataFrame:
     return df[["Close", "Volume"]]
 
 
-def _cache_file(symbol: str):
-    return data_dir() / "cache" / "prices" / f"{symbol.replace('&', '_and_')}.pkl"
+def _cache_file(symbol: str, cache: str = "prices"):
+    return data_dir() / "cache" / cache / f"{symbol.replace('&', '_and_')}.pkl"
 
 
 def get_prices(
@@ -35,13 +35,14 @@ def get_prices(
     months: int = 14,
     progress: Callable[[int, int, str], None] | None = None,
     max_age_s: float = CACHE_MAX_AGE_S,
+    cache: str = "prices",
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     """Return (closes, volumes, failed). Fetched one at a time (parallel fetches lock yfinance's cache)."""
     closes, vols, failed = {}, {}, []
     for i, sym in enumerate(symbols):
         if progress:
             progress(i, len(symbols), sym)
-        f = _cache_file(sym)
+        f = _cache_file(sym, cache)
         df = None
         if f.exists() and time.time() - f.stat().st_mtime < max_age_s:
             df = pd.read_pickle(f)

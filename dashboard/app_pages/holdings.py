@@ -4,7 +4,7 @@ import streamlit as st
 from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, fmt_inr, footer, my_moves,
                     quotes, require_unlock, trades)
 from mypropicks import ledger
-from mypropicks.config import BENCHMARKS
+from mypropicks.config import BENCHMARK_NAMES, BENCHMARKS
 from mypropicks.history import value_over_time
 from mypropicks.prices import get_prices, index_history
 
@@ -120,7 +120,7 @@ for pf in PF_KEYS:
             "weight": st.column_config.NumberColumn("Weight %", format="%.1f%%"),
         })
 
-        with st.expander("Value over time vs index", on_change="rerun") as exp:
+        with st.expander(f"Value over time vs {BENCHMARK_NAMES[pf]}", on_change="rerun") as exp:
             if exp.open:
                 syms = sorted(t.loc[t["portfolio"] == pf, "symbol"].unique())
                 closes, _, _ = get_prices(syms)
@@ -132,7 +132,7 @@ for pf in PF_KEYS:
                     bench = index_history(BENCHMARKS[pf], str(v.index[0].date()))
                     if not bench.empty:
                         b = bench.reindex(v.index).ffill()
-                        chart[PORTFOLIOS[pf]["index_name"]] = b / b.dropna().iloc[0] * 100
+                        chart[BENCHMARK_NAMES[pf]] = b / b.dropna().iloc[0] * 100
                     else:
                         st.caption("The comparison index isn't available from Yahoo right now.")
                     st.line_chart(chart, alt=f"{PF_LABELS[pf]} value against its index, both starting at 100")

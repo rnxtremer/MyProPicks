@@ -243,3 +243,56 @@ def quarterly_summary(raw: dict, n: int = 4) -> list[dict]:
     ni = q.get("Net Income") or {}
     keys = sorted(set(rev) | set(ni))[-n:]
     return [{"quarter": k, "revenue": rev.get(k), "net_profit": ni.get(k)} for k in keys]
+
+
+# ---------- point in time (for the backtest) ----------
+
+def as_of(raw: dict, when, price: float, lag_days: int = 90) -> dict:
+    """The company as the model could have seen it on `when`, at share price `price`.
+
+    Annual results count only once `lag_days` have passed since the financial year ended (Indian
+    companies publish within about 60 days). Valuation ratios are rebuilt from those results and
+    the price, using today's share count (prices are split-adjusted). There's no history of
+    analyst targets, so none is used.
+    """
+    import datetime as _dt
+
+    when = _dt.date.fromisoformat(str(when)[:10])  # accepts date, datetime, Timestamp or text
+
+    def visible(section: dict) -> dict:
+        out = {}
+        for row, vals in (section or {}).items():
+            kept = {k: v for k, v in (vals or {}).items()
+                    if _dt.date.fromisoformat(k[:10]) + _dt.timedelta(days=lag_days) <= when}
+            if kept:
+                out[row] = kept
+        return out
+
+    fin, bs, cf = visible(raw.get("financials")), visible(raw.get("balance_sheet")), visible(raw.get("cashflow"))
+    info0 = raw.get("info") or {}
+    shares = _num(info0.get("sharesOutstanding"))
+    ni = _latest(fin, "Net Income Common Stockholders")
+    if ni is None:
+        ni = _latest(fin, "Net Income")
+    equity = _latest(bs, "Stockholders Equity")
+    ebitda = _latest(fin, "EBITDA")
+    debt = _latest(bs, "Total Debt") or 0.0
+    cash = _latest(bs, "Cash And Cash Equivalents") or 0.0
+    eps = ni / shares if ni is not None and shares else None
+    bvps = equity / shares if equity is not None and shares else None
+    mcap = price * shares if price and shares else None
+    info = {
+        "sharesOutstanding": shares,
+        "sector": info0.get("sector"),
+        "trailingEps": eps,
+        "bookValue": bvps,
+        "trailingPE": price / eps if eps and eps > 0 and price else None,
+        "priceToBook": price / bvps if bvps and bvps > 0 and price else None,
+        "marketCap": mcap,
+        "enterpriseToEbitda": (mcap + debt - cash) / ebitda if mcap and ebitda and ebitda > 0 else None,
+        "targetMeanPrice": None,
+        "numberOfAnalystOpinions": None,
+    }
+    closes = {k: v for k, v in (raw.get("monthly_close") or {}).items() if k <= when.isoformat()}
+    return {"info": info, "financials": fin, "balance_sheet": bs, "cashflow": cf,
+            "monthly_close": closes}

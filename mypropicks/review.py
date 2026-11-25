@@ -116,6 +116,42 @@ def latest_list_dir(portfolio: str, before: date) -> Path | None:
     return dirs[-1] if dirs else None
 
 
+def rank_universe(metrics: pd.DataFrame, closes: pd.DataFrame, vols: pd.DataFrame, cfg: dict,
+                  portfolio: str) -> pd.DataFrame:
+    """Score and rank one universe from its metrics and prices (latest row = today).
+
+    Used by the review and, on past dates, by the backtest, so both run the same model.
+    """
+    syms = metrics.index.tolist()
+    mom = momentum_metrics(closes) if not closes.empty else pd.DataFrame()
+    metrics = metrics.join(mom, how="left")
+    ltp = closes.ffill().iloc[-1] if not closes.empty else pd.Series(dtype=float)
+    metrics["ltp"] = ltp.reindex(syms)
+
+    shares = pd.to_numeric(metrics["shares"], errors="coerce").to_dict()
+    elig = check_eligibility(closes, vols, shares, cfg["liquidity_cr"][portfolio],
+                             min_history=cfg["eligibility"]["min_history_days"],
+                             traded_window=cfg["eligibility"]["traded_days_window"])
+
+    med = sector_medians(metrics)
+    fv_rows = {}
+    for s in syms:
+        m = metrics.loc[s].to_dict()
+        md = med.loc[m["sector"]].to_dict() if m.get("sector") in med.index else {}
+        fv_rows[s] = fair_value(m, md, m.get("ltp"), cfg["fair_value"])
+    metrics["fair_value"] = [fv_rows[s]["fair_value"] for s in syms]
+    metrics["upside"] = [fv_rows[s]["upside"] for s in syms]
+    metrics["fv_label"] = [fv_rows[s]["label"] for s in syms]
+    metrics["fv_methods"] = [json.dumps(fv_rows[s]["methods"]) for s in syms]
+    metrics["fv_n_methods"] = [fv_rows[s]["n_methods"] for s in syms]
+    metrics["fv_confidence"] = [fv_rows[s]["confidence"] for s in syms]
+
+    scored = score_universe(metrics, elig, cfg["weights"], cfg["low_data_threshold"])
+    table = scored.join(metrics.drop(columns=[c for c in scored.columns if c in metrics.columns]))
+    table.index.name = "symbol"
+    return table
+
+
 def build_rankings(portfolio: str, cfg: dict, progress: Progress | None = None) -> tuple[pd.DataFrame, list[str], pd.DataFrame]:
     """Return (rankings table, failed symbols, closes) for one portfolio's universe."""
     uni = universe.fetch_universe(portfolio).drop_duplicates("symbol").set_index("symbol")
@@ -146,32 +182,7 @@ def build_rankings(portfolio: str, cfg: dict, progress: Progress | None = None) 
     metrics["sector"] = uni["industry"]  # NSE's own industry classification
     metrics["name"] = uni["name"]
 
-    mom = momentum_metrics(closes) if not closes.empty else pd.DataFrame()
-    metrics = metrics.join(mom, how="left")
-    ltp = closes.ffill().iloc[-1] if not closes.empty else pd.Series(dtype=float)
-    metrics["ltp"] = ltp.reindex(syms)
-
-    shares = pd.to_numeric(metrics["shares"], errors="coerce").to_dict()
-    elig = check_eligibility(closes, vols, shares, cfg["liquidity_cr"][portfolio],
-                             min_history=cfg["eligibility"]["min_history_days"],
-                             traded_window=cfg["eligibility"]["traded_days_window"])
-
-    med = sector_medians(metrics)
-    fv_rows = {}
-    for s in syms:
-        m = metrics.loc[s].to_dict()
-        md = med.loc[m["sector"]].to_dict() if m.get("sector") in med.index else {}
-        fv_rows[s] = fair_value(m, md, m.get("ltp"), cfg["fair_value"])
-    metrics["fair_value"] = [fv_rows[s]["fair_value"] for s in syms]
-    metrics["upside"] = [fv_rows[s]["upside"] for s in syms]
-    metrics["fv_label"] = [fv_rows[s]["label"] for s in syms]
-    metrics["fv_methods"] = [json.dumps(fv_rows[s]["methods"]) for s in syms]
-    metrics["fv_n_methods"] = [fv_rows[s]["n_methods"] for s in syms]
-    metrics["fv_confidence"] = [fv_rows[s]["confidence"] for s in syms]
-
-    scored = score_universe(metrics, elig, cfg["weights"], cfg["low_data_threshold"])
-    table = scored.join(metrics.drop(columns=[c for c in scored.columns if c in metrics.columns]))
-    table.index.name = "symbol"
+    table = rank_universe(metrics, closes, vols, cfg, portfolio)
     all_failed = sorted(set(failed) | set(fund_failed))
     table["fetch_note"] = ""
     for s in failed:
