@@ -2,9 +2,10 @@ from datetime import date
 
 import streamlit as st
 
-from common import PF_KEYS, PF_LABELS, current_review, footer, load_review_file, trades
+from common import PF_KEYS, PF_LABELS, current_review, footer, my_moves, require_unlock, trades
 from mypropicks import ledger
 
+require_unlock()
 st.title("Log a trade")
 st.caption("Record each trade you actually placed with your broker. Holdings and P&L come from these.")
 
@@ -12,7 +13,7 @@ rev = current_review()
 suggest = {}
 if rev:
     for pf in PF_KEYS:
-        ch = load_review_file(str(rev), f"changes_{pf}.csv")
+        ch, _ = my_moves(rev, pf)
         if ch is not None:
             suggest[pf] = ch
 
@@ -40,7 +41,7 @@ if ok:
                    f"{PF_LABELS[row['portfolio']]} on {row['date']}.", title="Saved")
 
 if suggest:
-    with st.expander("This month's suggested trades (for reference)"):
+    with st.expander("Your moves this month (for reference)"):
         for k, ch in suggest.items():
             if not ch.empty:
                 st.markdown(f"**{PF_LABELS[k]}**")
@@ -52,6 +53,6 @@ if t.empty:
     st.caption("No trades yet.")
 else:
     st.dataframe(t.tail(20).iloc[::-1], hide_index=True, alt="The 20 most recent trades")
-    st.caption("To fix a mistake, remove the wrong line from data/trades.csv (in your GitHub repo when using the cloud app).")
+    st.caption("To fix a mistake, remove the wrong line from data/trades.csv (in your private data repo when using the cloud app).")
 
 footer()

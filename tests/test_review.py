@@ -3,6 +3,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from mypropicks.config import load_config
+
 from mypropicks import fundamentals, ledger, prices, review, universe
 from mypropicks.review import decide_changes
 from mypropicks.sizing import suggest_quantities
@@ -119,11 +121,26 @@ def test_second_review_carries_added_on(tmp_data, monkeypatch):
     assert (b.loc[common, "added_on"] == "2026-12-01").all()
 
 
-def test_review_uses_holdings_when_logged(tmp_data, monkeypatch):
+def test_review_ignores_your_trades_and_capital(tmp_data, monkeypatch):
+    """The review is committed to a public repo, so it must not reveal holdings or capital."""
     _install_fakes(monkeypatch)
     ledger.append_trade("2026-11-01", "nifty20", "OLDCO", "BUY", 5, 100)
+    monkeypatch.setattr(review, "load_config", lambda: {**load_config(), "capital": {"nifty20": 100000}})
     out = review.run_review(as_of=date(2026, 12, 1), portfolios=["nifty20"])
     ch = pd.read_csv(out / "changes_nifty20.csv")
-    sells = ch[ch["action"] == "SELL"]
-    assert sells["symbol"].tolist() == ["OLDCO"]
-    assert sells["reason"].tolist() == ["left universe"]
+    assert "OLDCO" not in ch["symbol"].tolist()
+    assert ch["qty"].isna().all()
+    text = (out / "summary.md").read_text(encoding="utf-8")
+    assert "OLDCO" not in text and "100,000" not in text
+
+
+def test_personal_changes_use_holdings_and_cash(tmp_data, monkeypatch):
+    _install_fakes(monkeypatch)
+    out = review.run_review(as_of=date(2026, 12, 1), portfolios=["nifty20"])
+    table = pd.read_csv(out / "rankings_nifty20.csv", index_col=0)
+    ledger.append_trade("2026-11-01", "nifty20", "OLDCO", "BUY", 5, 100)
+    rows, warnings = review.personal_changes(table, ledger.load_trades(), "nifty20", 100000)
+    sells = [r for r in rows if r["action"] == "SELL"]
+    buys = [r for r in rows if r["action"] == "BUY"]
+    assert [(r["symbol"], r["reason"], r["qty"]) for r in sells] == [("OLDCO", "left universe", 5)]
+    assert len(buys) == 20 and all(r["qty"] >= 0 for r in buys)

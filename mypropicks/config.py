@@ -73,6 +73,11 @@ def data_dir() -> Path:
     return Path(env) if env else PROJECT_ROOT / "data"
 
 
+def capital_path() -> Path:
+    """Your capital is private, so it lives in its own file, kept out of the public repo."""
+    return data_dir() / "capital.yaml"
+
+
 def config_path() -> Path:
     env = os.environ.get("MYPROPICKS_CONFIG")
     return Path(env) if env else PROJECT_ROOT / "config.yaml"
@@ -88,24 +93,36 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
+def _read_yaml(p: Path) -> dict:
+    if not p.exists():
+        return {}
+    with open(p, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
 def load_config(path: str | Path | None = None) -> dict:
-    p = Path(path) if path else config_path()
-    if p.exists():
-        with open(p, encoding="utf-8") as f:
-            return _merge(DEFAULTS, yaml.safe_load(f) or {})
-    return copy.deepcopy(DEFAULTS)
+    """Defaults, then config.yaml, then your private capital.yaml on top."""
+    cfg = _merge(DEFAULTS, _read_yaml(Path(path) if path else config_path()))
+    return _merge(cfg, {"capital": _read_yaml(capital_path())})
 
 
-def save_capital(capital: dict[str, float], path: str | Path | None = None) -> None:
-    """Update only the capital section of config.yaml, keeping everything else."""
-    p = Path(path) if path else config_path()
-    current = {}
-    if p.exists():
-        with open(p, encoding="utf-8") as f:
-            current = yaml.safe_load(f) or {}
-    current.setdefault("capital", {}).update({k: float(v) for k, v in capital.items()})
+def save_capital(capital: dict[str, float]) -> None:
+    """Save your capital to capital.yaml (and, in cloud mode, to the private data repo only)."""
+    from . import remote  # late import: remote imports this module
+    p = capital_path()
+    repo = remote.data_repo() if remote.enabled() else None  # refuse before writing anything
+    current = _read_yaml(p)
+    current.update({k: float(v) for k, v in capital.items()})
+    p.parent.mkdir(parents=True, exist_ok=True)
+    before = p.read_bytes() if p.exists() else None
     with open(p, "w", encoding="utf-8") as f:
         yaml.safe_dump(current, f, sort_keys=False)
-    from . import remote  # late import: remote imports this module
-    if remote.enabled():
-        remote.push(p, "settings: update capital")
+    if repo:
+        try:
+            remote.push(p, "settings: update capital", repo=repo)
+        except ValueError:
+            if before is None:
+                p.unlink()
+            else:
+                p.write_bytes(before)
+            raise

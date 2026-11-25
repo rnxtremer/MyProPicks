@@ -146,13 +146,15 @@ with tabs[3]:
     st.markdown("**Example:** last month's Nifty 20 held stock A at rank 8. This month A ranks 24, so the "
                 "review says **SELL A — dropped to rank 24**, and **BUY** the highest-ranked stock in the new "
                 "top 20 that you don't own.")
-    st.markdown("**What it compares against:** the trades you've logged for that portfolio. If you "
-                "haven't logged any, it compares with last month's recommended list.")
+    st.markdown("**What it compares against:** the review itself always compares with last month's "
+                "list, so the published lists are the model portfolio. **Your moves** on the "
+                "*My holdings & P&L* page compare the new list with the stocks you actually hold.")
     st.markdown("**Safety nets:**\n"
                 "- If a held stock's price can't be downloaded, it's **kept** (not sold) and you get a warning.\n"
                 "- If fewer than N stocks are eligible, the list is filled with the next best and you're warned.\n"
-                "- With capital set in Settings, each buy gets a **suggested quantity**: the money for the "
-                "buys is split equally and rounded down to whole shares.")
+                "- On *My holdings & P&L*, each of your buys gets a **suggested quantity**: your sale "
+                "proceeds and spare cash (or your capital, if you hold nothing yet) are split equally "
+                "and rounded down to whole shares.")
 
 # ---- trades & P&L ----
 with tabs[4]:
@@ -177,12 +179,14 @@ with tabs[5]:
     st.table({
         ":material/event: This month": "The latest review: what to sell, what to buy, and why",
         ":material/analytics: Portfolio analysis": "Each current list with live price, fair value, valuation label, health and a detail card per stock",
-        ":material/account_balance_wallet: My holdings & P&L": "What you actually own, its value, profit or loss, and the value over time vs the index",
-        ":material/edit_note: Log a trade": "Record a buy or sell",
+        ":material/account_balance_wallet: My holdings & P&L": "Private. Your own moves this month, what you own, its value, profit or loss, and the value over time vs the index",
+        ":material/edit_note: Log a trade": "Private. Record a buy or sell",
         ":material/leaderboard: Full rankings": "Every stock in each index with every score",
-        ":material/settings: Settings & review": "Set your capital, run a review now, refresh the at-risk check",
+        ":material/settings: Settings & review": "Private. Set your capital, run a review now, refresh the at-risk check",
         ":material/school: How it works": "This page",
     }, border="horizontal")
+    st.caption(":material/lock: Private pages ask for the app password, so your holdings, trades "
+               "and capital stay yours even when the app link is public.")
 
 # ---- data & limits ----
 with tabs[6]:

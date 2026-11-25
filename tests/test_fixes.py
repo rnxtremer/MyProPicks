@@ -38,8 +38,11 @@ def test_review_survives_held_stock_fetch_failure(tmp_data, monkeypatch):
     for s in ["S05"] + [f"S{i:02d}" for i in range(10, 29)]:
         ledger.append_trade("2026-11-02", "nifty20", s, "BUY", 1, 100)
     out = review.run_review(as_of=date(2026, 12, 1), portfolios=["nifty20"])
-    lst = pd.read_csv(out / "list_nifty20.csv")
-    assert len(lst) == 20 and "S05" in lst["symbol"].tolist()
+    assert len(pd.read_csv(out / "list_nifty20.csv")) == 20
+    table = pd.read_csv(out / "rankings_nifty20.csv", index_col=0)
+    rows, warnings = review.personal_changes(table, ledger.load_trades(), "nifty20", 0)
+    assert "S05" not in [r["symbol"] for r in rows if r["action"] == "SELL"]
+    assert any("S05" in w and "price" in w for w in warnings)
 
 
 # Important 2: outlier rule must not wipe out every method.

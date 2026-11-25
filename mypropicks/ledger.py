@@ -100,10 +100,11 @@ def append_trade(date, portfolio: str, symbol: str, action: str, qty: float, pri
     d = _date.fromisoformat(str(date)) if date else _date.today()
 
     f = trades_file()
-    sha = None
+    sha = repo = None
     if remote.enabled():
-        # Start from the repo's copy, so a trade logged on another device isn't lost.
-        sha = remote.pull(f)
+        # Start from the private data repo's copy, so a trade logged on another device isn't lost.
+        repo = remote.data_repo()
+        sha = remote.pull(f, repo=repo)
     trades = load_trades()
     if action == "SELL":
         # Check against what you held on the trade date, so a back-dated sell can't go negative.
@@ -124,7 +125,7 @@ def append_trade(date, portfolio: str, symbol: str, action: str, qty: float, pri
         w.writerow(row)
     if remote.enabled():
         try:
-            remote.push(f, f"trade: {action} {qty:g} {symbol} ({portfolio})", sha=sha)
+            remote.push(f, f"trade: {action} {qty:g} {symbol} ({portfolio})", sha=sha, repo=repo)
         except ValueError:
             # Not saved to GitHub, so undo the local write too.
             if before is None:

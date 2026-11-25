@@ -29,7 +29,7 @@ Compared against: nothing (first run). 0 out, 20 in, 0 kept.
 | BUY | POLYCAB | rank 19 | — | 7,430.00 |
 | BUY | JSWSTEEL | rank 20 | — | 1,311.90 |
 
-_Set capital for nifty20 in config.yaml (or log your trades) to get suggested quantities._
+_Your own sells, buys and quantities are on the **My holdings & P&L** page._
 
 
 ## Nifty Midcap 30 (30 stocks from Nifty Midcap 150)
@@ -69,7 +69,7 @@ Compared against: nothing (first run). 0 out, 30 in, 0 kept.
 | BUY | GVT&D | rank 29 | — | 4,195.00 |
 | BUY | RECLTD | rank 30 | — | 292.95 |
 
-_Set capital for midcap30 in config.yaml (or log your trades) to get suggested quantities._
+_Your own sells, buys and quantities are on the **My holdings & P&L** page._
 
 
 ## Nifty Smallcap 50 (50 stocks from Nifty Smallcap 250)
@@ -129,7 +129,7 @@ Compared against: nothing (first run). 0 out, 50 in, 0 kept.
 | BUY | PNBHOUSING | rank 49 | — | 1,180.20 |
 | BUY | CGCL | rank 50 | — | 232.61 |
 
-_Set capital for smallcap50 in config.yaml (or log your trades) to get suggested quantities._
+_Your own sells, buys and quantities are on the **My holdings & P&L** page._
 
 - ⚠ Data could not be fetched for 2 stock(s): BAGMANE, DUMMYHEG. They were ranked with what was available, or as ineligible if prices were missing.
 

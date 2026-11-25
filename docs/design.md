@@ -156,7 +156,7 @@ based on.
   trading day.
 
 ### 6.4 Quantities (equal weight)
-- The owner sets the capital for each portfolio in `config.yaml`.
+- The owner sets the capital for each portfolio on the Settings page (saved to `data/capital.yaml`).
 - First run: qty = floor((capital ÷ N) ÷ price).
 - Monthly swaps: sale proceeds (at the latest close) are split equally across the BUYs, plus
   any leftover cash. Existing holdings are **not** rebalanced. Only the swapped slots move.
@@ -177,7 +177,12 @@ based on.
 
 ### 6.6 Files (all under `F:\MyProPicks\data\`)
 - `trades.csv`: the trade log. This is the single source of truth for holdings and P&L.
-- `config.yaml`: capital per portfolio, factor weights, liquidity thresholds.
+- `config.yaml`: factor weights, liquidity thresholds.
+- `capital.yaml`: capital per portfolio. Private, like `trades.csv`: in the cloud both live in a
+  separate private data repo, so the code repo can be public.
+- The review files are the model portfolio (compared with last month's list, no quantities),
+  so they are safe to publish. The owner's own sells, buys and quantities are worked out live
+  on the password-locked holdings page.
 - `universe/<index>.csv`: cached constituent lists.
 - `cache/prices/`: cached price history.
 - `reviews/YYYY-MM-DD/`: each review's full rankings (CSV, with every factor score), the

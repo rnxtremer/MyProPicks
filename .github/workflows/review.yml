@@ -35,6 +35,8 @@ jobs:
           key: market-data-${{ github.run_id }}
           restore-keys: market-data-
 
+      # The review is the model portfolio: it never reads your trades or capital, which live in
+      # the private data repo, so its results are safe to commit to this (public) repo.
       - name: Run the review
         run: python -m mypropicks review
 

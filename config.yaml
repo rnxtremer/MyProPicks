@@ -1,7 +1,3 @@
-capital:
-  nifty20: 0.0
-  midcap30: 0.0
-  smallcap50: 0.0
 weights:
   profitability: 0.2
   growth: 0.2

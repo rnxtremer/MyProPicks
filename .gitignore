@@ -6,3 +6,6 @@ __pycache__/
 .streamlit/secrets.toml
 dashboard/.streamlit/secrets.toml
 data/reviews/run.log
+# Private: your trades and capital live in the private data repo, never in this one
+data/trades.csv
+data/capital.yaml

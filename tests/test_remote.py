@@ -19,7 +19,8 @@ class FakeGitHub:
         if "/dispatches" in url:
             self.dispatches.append(body)
             return 204, {}
-        path = url.split("/contents/", 1)[1].split("?")[0]
+        repo, path = url.split("/repos/", 1)[1].split("/contents/", 1)
+        path = f"{repo}:{path.split('?')[0]}"
         if method == "GET":
             if path not in self.files:
                 return 404, {}
@@ -43,6 +44,7 @@ def cloud(monkeypatch, tmp_path):
     monkeypatch.setenv("MYPROPICKS_CONFIG", str(root / "config.yaml"))
     monkeypatch.setenv("MYPROPICKS_GH_TOKEN", "test-token")
     monkeypatch.setenv("MYPROPICKS_GH_REPO", "owner/MyProPicks")
+    monkeypatch.setenv("MYPROPICKS_GH_DATA_REPO", "owner/MyProPicks-data")
     gh = FakeGitHub()
     monkeypatch.setattr(remote, "_http", gh)
     return root, gh
@@ -58,19 +60,19 @@ def test_trade_is_saved_to_github(cloud):
     root, gh = cloud
     ledger.append_trade("2026-12-01", "nifty20", "TCS", "BUY", 10, 3450)
     path, body = gh.puts[-1]
-    assert path == "data/trades.csv"
+    assert path == "owner/MyProPicks-data:data/trades.csv"
     assert body["sha"] is None and "TCS" in gh.files[path]
 
 
 def test_trade_uses_latest_github_copy(cloud):
     """A trade logged from another device must not be overwritten."""
     root, gh = cloud
-    gh.files["data/trades.csv"] = ("date,portfolio,symbol,action,qty,price,charges,note\n"
+    gh.files["owner/MyProPicks-data:data/trades.csv"] = ("date,portfolio,symbol,action,qty,price,charges,note\n"
                                    "2026-12-01,nifty20,INFY,BUY,5.0,1500.0,0.0,\n")
     ledger.append_trade("2026-12-02", "nifty20", "TCS", "BUY", 10, 3450)
-    saved = gh.files["data/trades.csv"]
+    saved = gh.files["owner/MyProPicks-data:data/trades.csv"]
     assert "INFY" in saved and "TCS" in saved
-    assert gh.puts[-1][1]["sha"] == "sha-data/trades.csv"
+    assert gh.puts[-1][1]["sha"] == "sha-owner/MyProPicks-data:data/trades.csv"
 
 
 def test_failed_save_leaves_nothing_behind(cloud, monkeypatch):
@@ -84,7 +86,9 @@ def test_failed_save_leaves_nothing_behind(cloud, monkeypatch):
 def test_capital_is_saved_to_github(cloud):
     root, gh = cloud
     config.save_capital({"nifty20": 50000})
-    assert "50000" in gh.files["config.yaml"]
+    assert "50000" in gh.files["owner/MyProPicks-data:data/capital.yaml"]
+    assert not any(p.startswith("owner/MyProPicks:") for p, _ in gh.puts)
+    assert config.load_config()["capital"]["nifty20"] == 50000
 
 
 def test_trigger_review(cloud):
@@ -98,3 +102,24 @@ def test_local_mode_makes_no_calls(tmp_data, monkeypatch):
     monkeypatch.setattr(remote, "_http", lambda *a, **k: pytest.fail("network call in local mode"))
     ledger.append_trade("2026-12-01", "nifty20", "TCS", "BUY", 10, 3450)
     assert len(ledger.load_trades()) == 1
+
+
+def test_private_files_never_go_to_the_public_repo(cloud, monkeypatch):
+    """Without a data repo, a trade is refused rather than saved to the public code repo."""
+    root, gh = cloud
+    monkeypatch.delenv("MYPROPICKS_GH_DATA_REPO")
+    with pytest.raises(ValueError, match="data_repo"):
+        ledger.append_trade("2026-12-01", "nifty20", "TCS", "BUY", 10, 3450)
+    assert gh.puts == []
+    assert ledger.load_trades().empty
+
+
+def test_sync_private_pulls_trades_and_capital(cloud):
+    root, gh = cloud
+    gh.files["owner/MyProPicks-data:data/trades.csv"] = (
+        "date,portfolio,symbol,action,qty,price,charges,note\n"
+        "2026-12-01,nifty20,INFY,BUY,5.0,1500.0,0.0,\n")
+    gh.files["owner/MyProPicks-data:data/capital.yaml"] = "nifty20: 75000\n"
+    remote.sync_private()
+    assert ledger.load_trades()["symbol"].tolist() == ["INFY"]
+    assert config.load_config()["capital"]["nifty20"] == 75000

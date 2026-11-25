@@ -2,11 +2,12 @@ from datetime import date
 
 import streamlit as st
 
-from common import PF_KEYS, PF_LABELS, config, footer, load_review_file, snapshot_file
+from common import PF_KEYS, PF_LABELS, config, footer, load_review_file, require_unlock, snapshot_file
 from mypropicks import remote
 from mypropicks.config import save_capital
 from mypropicks.review import build_rankings, run_review
 
+require_unlock()
 st.title("Settings & review")
 
 cfg = config()
@@ -22,7 +23,7 @@ with st.container(border=True):
         if st.form_submit_button("Save capital", icon=":material/save:"):
             try:
                 save_capital(vals)
-                st.success("Saved." + (" It's also saved to your GitHub repo." if remote.enabled() else ""))
+                st.success("Saved." + (" It's also saved to your private data repo." if remote.enabled() else ""))
             except ValueError as e:
                 st.error(str(e))
 
@@ -75,7 +76,7 @@ with st.container(border=True):
         bar.progress(1.0, text="Done")
         st.success("Live ranks updated.")
 
-with st.expander("Current settings (config.yaml)"):
+with st.expander("Current settings (config.yaml, plus your capital)"):
     st.json(cfg)
 
 footer()

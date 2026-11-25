@@ -29,8 +29,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install_monthly_task.ps1
 ```
 
 ## Settings
-Edit `config.yaml` to set your capital per portfolio, the category weights and the liquidity
-floors, or set capital in the dashboard's Settings page.
+Edit `config.yaml` to change the category weights and the liquidity floors. Set your capital
+per portfolio on the dashboard's Settings page; it's saved in `data/capital.yaml`, which, like
+`data/trades.csv`, is private and never committed to this repo.
 
 ## How the ranking works
 See `docs/design.md`, sections 6.2a–6.2c.

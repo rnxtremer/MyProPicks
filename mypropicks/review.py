@@ -59,6 +59,39 @@ def decide_changes(ranked: pd.DataFrame, held: list[str], n: int) -> dict:
     return {"new_list": new_list, "sell": sell, "buy": buy, "keep": keep, "warnings": warnings}
 
 
+def _change_rows(table: pd.DataFrame, ch: dict, sell_qty: dict, buy_qty: dict) -> list[dict]:
+    ltp = table["ltp"].to_dict()
+    rows = [{"action": "SELL", "symbol": s, "reason": r, "qty": sell_qty.get(s, ""),
+             "price": ltp.get(s, "")} for s, r in ch["sell"]]
+    rows += [{"action": "BUY", "symbol": s, "reason": f"rank {int(table.at[s, 'rank'])}",
+              "qty": buy_qty.get(s, ""), "price": ltp.get(s)} for s in ch["buy"]]
+    return rows
+
+
+def personal_changes(table: pd.DataFrame, trades: pd.DataFrame, portfolio: str,
+                     capital: float) -> tuple[list[dict], list[str]]:
+    """Your own SELL/BUY list for one portfolio, from a review's rankings and your trades.
+
+    Sells are everything you hold that left the top N. Buys get suggested quantities: with no
+    holdings yet, your capital is split across the whole list; otherwise the sale proceeds plus
+    spare cash are split across the buys. Returns (rows, warnings); rows match changes_<pf>.csv.
+    """
+    n = PORTFOLIOS[portfolio]["n"]
+    held = ledger.held_symbols(trades, portfolio)
+    ch = decide_changes(table, held, n)
+    ltp = {k: v for k, v in table["ltp"].to_dict().items() if v == v}
+    h = ledger.holdings(trades, portfolio).set_index("symbol")
+    if held:
+        proceeds = sum(h.at[s, "qty"] * ltp.get(s, h.at[s, "avg_cost"]) for s, _ in ch["sell"])
+        budget = proceeds + max(ledger.cash(trades, portfolio, capital), 0)
+    else:
+        budget = capital
+    buy_qty = suggest_quantities(ch["buy"], ltp, budget) if budget else {}
+    sell_qty = {s: int(h.at[s, "qty"]) if float(h.at[s, "qty"]).is_integer() else float(h.at[s, "qty"])
+                for s, _ in ch["sell"] if s in h.index}
+    return _change_rows(table, ch, sell_qty, buy_qty), ch["warnings"]
+
+
 def _review_dir(d: date) -> Path:
     return data_dir() / "reviews" / d.isoformat()
 
@@ -157,8 +190,6 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
     cfg = load_config()
     out = _review_dir(as_of)
     out.mkdir(parents=True, exist_ok=True)
-    trades = ledger.load_trades()
-
     lines = [f"# MyProPicks review — {as_of.isoformat()}", "",
              "Prices are the latest available closes. Place trades on the next trading day.", ""]
     for pf in portfolios or list(PORTFOLIOS):
@@ -167,7 +198,6 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
         table, failed, _ = build_rankings(pf, cfg, progress)
         table.to_csv(out / f"rankings_{pf}.csv")
 
-        holdings_held = ledger.held_symbols(trades, pf)
         prev_list = []
         prev_entries = {}
         prev_dir = latest_list_dir(pf, as_of)
@@ -175,11 +205,11 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
             pl = pd.read_csv(prev_dir / f"list_{pf}.csv")
             prev_list = pl["symbol"].tolist()
             prev_entries = pl.set_index("symbol")[["added_on", "added_price"]].to_dict("index")
-        if holdings_held:
-            basis, held = "your logged holdings", holdings_held
-        else:
-            basis, held = ("last month's list" if prev_list else "nothing (first run)"), prev_list
-        ch = decide_changes(table, held, n)
+        # The review is the model portfolio: it is compared with last month's list, never with
+        # your trades or capital, because review results are saved to a public repo. Your own
+        # moves and quantities are worked out by personal_changes(), shown on the holdings page.
+        basis = "last month's list" if prev_list else "nothing (first run)"
+        ch = decide_changes(table, prev_list, n)
 
         ltp = table["ltp"].to_dict()
         lst = pd.DataFrame({"symbol": ch["new_list"]})
@@ -190,24 +220,7 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
         lst["added_price"] = [prev_entries.get(s, {}).get("added_price", ltp.get(s)) for s in lst["symbol"]]
         lst.to_csv(out / f"list_{pf}.csv", index=False)
 
-        # Quantities: first run uses capital; swaps use sale proceeds plus spare cash.
-        capital = float(cfg["capital"].get(pf) or 0)
-        if holdings_held:
-            h = ledger.holdings(trades, pf).set_index("symbol")
-            proceeds = sum(h.at[s, "qty"] * (ltp.get(s) if pd.notna(ltp.get(s)) else h.at[s, "avg_cost"]) for s, _ in ch["sell"] if s in h.index)
-            budget = proceeds + max(ledger.cash(trades, pf, capital), 0)
-        else:
-            budget = capital if not prev_list else 0
-        qty = suggest_quantities(ch["buy"], {k: v for k, v in ltp.items() if v == v}, budget)
-        sell_qty = {}
-        if holdings_held:
-            h = ledger.holdings(trades, pf).set_index("symbol")
-            sell_qty = {s: h.at[s, "qty"] for s, _ in ch["sell"] if s in h.index}
-
-        rows = [{"action": "SELL", "symbol": s, "reason": r, "qty": sell_qty.get(s, ""),
-                 "price": ltp.get(s, "")} for s, r in ch["sell"]]
-        rows += [{"action": "BUY", "symbol": s, "reason": f"rank {int(table.at[s, 'rank'])}",
-                  "qty": qty.get(s, "") if budget else "", "price": ltp.get(s)} for s in ch["buy"]]
+        rows = _change_rows(table, ch, {}, {})
         pd.DataFrame(rows, columns=["action", "symbol", "reason", "qty", "price"]).to_csv(
             out / f"changes_{pf}.csv", index=False)
 
@@ -219,11 +232,7 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
             for r in rows:
                 price = f"{r['price']:,.2f}" if isinstance(r["price"], (int, float)) and r["price"] == r["price"] else "—"
                 lines.append(f"| {r['action']} | {r['symbol']} | {r['reason']} | {r['qty'] if r['qty'] != '' else '—'} | {price} |")
-            lines.append("")
-            if not budget and ch["buy"]:
-                lines += [f"_Set capital for {pf} in config.yaml (or log your trades) to get suggested quantities._", ""]
-            else:
-                lines += [f"_Budget for buys: {_fmt_money(budget)}, split equally._", ""]
+            lines += ["", "_Your own sells, buys and quantities are on the **My holdings & P&L** page._", ""]
         else:
             lines += ["No changes this month.", ""]
         for w in ch["warnings"]:

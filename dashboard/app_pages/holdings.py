@@ -1,17 +1,62 @@
 import pandas as pd
 import streamlit as st
 
-from common import PF_KEYS, PF_LABELS, PORTFOLIOS, config, fmt_inr, footer, quotes, trades
+from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, fmt_inr, footer, my_moves,
+                    quotes, require_unlock, trades)
 from mypropicks import ledger
 from mypropicks.config import BENCHMARKS
 from mypropicks.history import value_over_time
 from mypropicks.prices import get_prices, index_history
 
+require_unlock()
 st.title("My holdings & P&L")
 st.caption("Built from the trades you logged. The average-cost method is used, as Indian brokers do.")
 
 t = trades()
 cfg = config()
+
+
+def your_moves() -> None:
+    """Your own sells and buys for the latest review, with suggested quantities."""
+    rev = current_review()
+    if rev is None:
+        return
+    with st.container(border=True):
+        st.subheader(":material/swap_horiz: Your moves this month")
+        st.caption(f"From the **{rev.name}** review, compared with what you hold. Quantities use "
+                   "your sale proceeds and spare cash, or your capital if you hold nothing yet.")
+        tabs = st.tabs([PF_LABELS[pf] for pf in PF_KEYS])
+        cols = {"symbol": "Stock", "reason": "Why",
+                "qty": st.column_config.NumberColumn("Qty", format="%g"),
+                "price": st.column_config.NumberColumn("Last close", format="₹%.2f")}
+        for tab, pf in zip(tabs, PF_KEYS):
+            with tab:
+                ch, warnings = my_moves(rev, pf)
+                if ch is None:
+                    st.caption("This portfolio wasn't part of the latest review.")
+                    continue
+                for w in warnings:
+                    st.warning(w)
+                if ch.empty:
+                    st.success("Nothing to change. Your portfolio matches the list.")
+                    continue
+                left, right = st.columns(2)
+                for col, action, colour in ((left, "SELL", "red"), (right, "BUY", "green")):
+                    with col:
+                        part = ch[ch["action"] == action].drop(columns="action")
+                        if part["qty"].isna().all():
+                            part = part.drop(columns="qty")
+                        st.markdown(f":{colour}[**{action.title()} {len(part)}**]")
+                        if part.empty:
+                            st.caption("Nothing.")
+                        else:
+                            st.dataframe(part, hide_index=True, column_config=cols,
+                                         alt=f"{PF_LABELS[pf]}: stocks to {action.lower()}")
+                if not float(cfg["capital"].get(pf) or 0) and t[t["portfolio"] == pf].empty:
+                    st.caption("Set your capital in **Settings & review** to get quantities.")
+
+
+your_moves()
 if t.empty:
     st.info("No trades logged yet. Use the **Log a trade** page to record your first buy.", title="Nothing logged")
     footer()

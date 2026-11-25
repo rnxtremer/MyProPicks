@@ -1,6 +1,7 @@
 """Shared loaders for the dashboard pages."""
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sys
@@ -11,20 +12,73 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+
+
+def _secrets(section: str) -> dict:
+    try:
+        return dict(st.secrets.get(section, {}))
+    except Exception:  # no secrets file when running locally
+        return {}
+
+
 # On Streamlit Cloud the GitHub token lives in the app's secrets; hand it to the core library.
-try:
-    _gh = st.secrets.get("github", {})
-except Exception:  # no secrets file when running locally
-    _gh = {}
+_gh = _secrets("github")
 for _k, _env in (("token", "MYPROPICKS_GH_TOKEN"), ("repo", "MYPROPICKS_GH_REPO"),
-                 ("branch", "MYPROPICKS_GH_BRANCH")):
+                 ("branch", "MYPROPICKS_GH_BRANCH"), ("data_repo", "MYPROPICKS_GH_DATA_REPO")):
     if _gh.get(_k):
         os.environ[_env] = str(_gh[_k])
 
-from mypropicks import fundamentals, ledger  # noqa: E402
+from mypropicks import fundamentals, ledger, remote  # noqa: E402
 from mypropicks.config import DISCLAIMER, PORTFOLIOS, data_dir, load_config  # noqa: E402
 from mypropicks.prices import get_prices, latest_quotes  # noqa: E402
-from mypropicks.review import latest_review  # noqa: E402
+from mypropicks.review import latest_review, personal_changes  # noqa: E402
+
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _sync_private() -> str | None:
+    """Fetch your trades and capital from the private data repo (cloud only)."""
+    try:
+        remote.sync_private()
+    except ValueError as e:
+        return str(e)
+    return None
+
+
+_sync_error = _sync_private()
+
+
+def require_unlock() -> None:
+    """Stop the page unless the visitor has entered the app password.
+
+    On your PC with no password set, pages stay open. In the cloud a password is required, so
+    nobody who finds the link can see your money or change your records.
+    """
+    password = str(_secrets("app").get("password") or "")
+    if not password and not remote.enabled():
+        return
+    if st.session_state.get("unlocked"):
+        if _sync_error:
+            st.warning(_sync_error, icon=":material/cloud_off:")
+        if st.sidebar.button("Lock", icon=":material/lock:"):
+            st.session_state["unlocked"] = False
+            st.rerun()
+        return
+    st.title(":material/lock: Private page")
+    if not password:
+        st.error("Set a password under [app] in the app's secrets to open this page.",
+                 icon=":material/key_off:")
+        st.stop()
+    st.caption("Your holdings, trades and settings are private. Enter the app password to continue.")
+    with st.form("unlock", border=False, width=360):
+        entered = st.text_input("Password", type="password")
+        if st.form_submit_button("Unlock", type="primary", icon=":material/lock_open:"):
+            if hmac.compare_digest(entered.encode(), password.encode()):
+                st.session_state["unlocked"] = True
+                st.rerun()
+            st.error("That password isn't right.")
+    st.stop()
+
 
 PF_KEYS = list(PORTFOLIOS)
 PF_LABELS = {k: v["label"] for k, v in PORTFOLIOS.items()}
@@ -86,6 +140,12 @@ def config() -> dict:
     return load_config()
 
 
+@st.cache_data(ttl=300)
+def load_rankings(folder: str, pf: str) -> pd.DataFrame | None:
+    f = Path(folder) / f"rankings_{pf}.csv"
+    return pd.read_csv(f, index_col=0) if f.exists() else None
+
+
 def snapshot_file(pf: str) -> Path:
     return data_dir() / "snapshots" / f"rankings_{pf}.csv"
 
@@ -94,3 +154,16 @@ def fmt_inr(x) -> str:
     if x is None or x != x:
         return "—"
     return f"₹{x:,.0f}"
+
+
+def my_moves(rev: Path, pf: str) -> tuple[pd.DataFrame | None, list[str]]:
+    """Your own SELL/BUY list for a review, from your trades and capital. Private pages only."""
+    table = load_rankings(str(rev), pf)
+    if table is None:
+        return None, []
+    capital = float(config()["capital"].get(pf) or 0)
+    rows, warnings = personal_changes(table, trades(), pf, capital)
+    df = pd.DataFrame(rows, columns=["action", "symbol", "reason", "qty", "price"])
+    for c in ("qty", "price"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df, warnings
