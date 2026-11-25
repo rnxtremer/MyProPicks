@@ -82,8 +82,9 @@ def test_backtest_chains_monthly_returns(monkeypatch):
     out = backtest.run_backtest("nifty20", CFG, closes, vols, raws, ind, index, months=24, n=1)
     assert list(out.columns) == ["ai", "baseline", "index"]
     assert out.iloc[0].tolist() == [100.0, 100.0, 100.0]
-    assert len(out) == 25  # start point plus 24 monthly steps
     d = backtest.month_ends(closes.index)
+    # Every trading day from the first month-end to the last, so the chart can zoom in.
+    assert list(out.index) == list(closes.index[(closes.index >= d[-25]) & (closes.index <= d[-1])])
     assert out["ai"].iloc[-1] == pytest.approx(closes.at[d[-1], "S00"] / closes.at[d[-25], "S00"] * 100, rel=1e-4)
     assert out["index"].iloc[-1] == pytest.approx(index[d[-1]] / index[d[-25]] * 100, rel=1e-4)
     every = 100.0

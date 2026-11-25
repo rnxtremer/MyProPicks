@@ -473,24 +473,40 @@ TERMS: list[dict] = [
          high="Above 15% a year: excellent for Indian stocks over several years.",
          low="Below 7% a year: about what a fixed deposit pays, with much more risk.",
          good="Compare it with the index's CAGR over the same years.",
+         matters="The How the AI did chart shows CAGR for periods longer than a year (2Y, Max). For a "
+                 "year or less it shows plain return instead, because a yearly rate over a few weeks "
+                 "would be misleading.",
          example="₹100 growing to ₹133 in 3 years is a CAGR of about 10% a year, not 11% (33 ÷ 3)."),
+    dict(group="performance", term="Return (for a period)",
+         what="How much an investment went up or down over a chosen stretch of time, in total, not per year.",
+         how="Value at the end ÷ value at the start − 1.",
+         high="Positive: it gained over the period.",
+         low="Negative: it lost over the period.",
+         good="Over short periods (a day, a week, a month) returns jump around a lot; judge the AI over "
+              "years, not weeks.",
+         matters="Shown above the chart for 1D, 1W, 1M, 3M, 6M and 1Y.",
+         example="₹100 becoming ₹104 over 1 month is a return of +4%."),
     dict(group="performance", term="How the AI did (backtest)",
          what="A test of the AI on the past 3 years: what ₹100 would have grown to if you had followed "
-              "its picks every month.",
+              "its picks, tracked every trading day.",
          how="At each month-end it ranks stocks using only the prices and results available then, buys "
              "the top N; each month after that, it sells stocks that fell below the holding buffer and "
              "buys the best new ones with that money, leaving the rest untouched.",
          good="A good result beats the dashed all-members line, not just the index.",
-         matters="Shows whether the rules have worked. Past results don't promise future returns."),
+         matters="Shows whether the rules have worked. Pick a period with the buttons (1D to Max): every "
+                 "period restarts at ₹100. Hover over the chart (or press and hold on a phone) to read "
+                 "the date and all three values. Past results don't promise future returns."),
     dict(group="performance", term="All members, equal weight",
          what="The dashed line on the chart: buying every stock in the index in equal amounts, with no "
               "choosing at all.",
-         how="Same months and same rules as the AI line, but holding all of today's members.",
+         how="Same period as the AI line, holding all of today's members in equal amounts and "
+             "rebalancing back to equal each month, like an index fund.",
          high="If it's far above the index, much of the gap comes from how the test works, not skill.",
          matters="The fair yardstick for the AI, because it shares the simulation's advantages."),
     dict(group="performance", term="AI's real edge",
-         what="How much the AI's choices added each year, compared with simply buying everything.",
-         how="AI CAGR − all-members CAGR, in percentage points.",
+         what="How much the AI's choices added, compared with simply buying everything.",
+         how="For periods longer than a year: AI CAGR − all-members CAGR, in points a year. For a year "
+             "or less: AI return − all-members return, in points.",
          high="Positive (e.g. +5 pts a year): the AI's choices added value.",
          low="Zero or negative: picking didn't beat buying the whole index.",
          good="Even +2 to +3 points a year adds up to a lot over 10+ years.",
@@ -642,6 +658,9 @@ RANGES: dict[str, list[tuple[str, str, str]]] = {
     "CAGR (compound annual growth rate)": [("Under 7% a year", "Below a fixed deposit", "red"),
                                            ("7% – 12%", "Average", "orange"),
                                            ("12% – 15%", "Good", "green"), ("Over 15%", "Excellent", "green")],
+    "Return (for a period)": [("Below 0%", "Lost money", "red"),
+                              ("Positive, but below the index", "Gained, but lagged", "orange"),
+                              ("Above the index", "Beat the market", "green")],
     "AI's real edge": [("Below 0 pts", "No edge", "red"), ("0 – 2 pts", "Small", "orange"),
                        ("2 – 5 pts", "Good", "green"), ("Over 5 pts", "Strong", "green")],
     "Total return": [("Below the index", "Lagging", "red"), ("About the index", "In line", "blue"),

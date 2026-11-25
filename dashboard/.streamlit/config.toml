@@ -10,6 +10,7 @@ headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;7
 baseFontSize = 14
 headingFontSizes = ["30px", "22px", "18px", "16px", "14px", "12px"]
 headingFontWeights = [700, 600, 600, 600, 500, 500]
+metricValueFontSize = "1.6rem"
 metricValueFontWeight = 600
 linkUnderline = false
 

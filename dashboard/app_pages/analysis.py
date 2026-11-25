@@ -129,49 +129,83 @@ if at_risk:
                title="At risk of removal", icon=":material/warning:")
 
 # ---- how the AI did ----
+PERIODS = {"1D": None, "1W": pd.DateOffset(weeks=1), "1M": pd.DateOffset(months=1),
+           "3M": pd.DateOffset(months=3), "6M": pd.DateOffset(months=6), "1Y": pd.DateOffset(years=1),
+           "2Y": pd.DateOffset(years=2), "Max": None}
 with st.container(border=True):
     bench = BENCHMARK_NAMES[pf]
-    st.markdown(f"**:material/show_chart: How the AI did: {PF_LABELS[pf]} vs {bench}**")
     bt = load_backtest(pf)
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.markdown(f"**:material/show_chart: How the AI did: {PF_LABELS[pf]} vs {bench}**", width="stretch")
+        period = st.segmented_control("Period", list(PERIODS), default="Max", required=True,
+                                      key=f"bt_period_{pf}", label_visibility="collapsed")
     if bt is None or len(bt) < 2:
         st.caption("The 3-year comparison appears after the next monthly review.")
     else:
-        ai_name, all_name = f"AI {PF_LABELS[pf]}", "All index members, equal weight"
-        has_base = "baseline" in bt
-        ai_c, ix_c = cagr(bt["ai"]), cagr(bt["index"])
-        base_c = cagr(bt["baseline"]) if has_base else None
-        years = (bt.index[-1] - bt.index[0]).days / 365.25
-        span = f"Average yearly growth over {years:.1f} years"
+        if period == "1D":
+            view = bt.iloc[-2:]
+        elif period == "Max":
+            view = bt
+        else:
+            view = bt[bt.index >= bt.index[-1] - PERIODS[period]]
+            view = bt.loc[bt.index[max(bt.index.get_indexer([view.index[0]])[0] - 1, 0)]:]  # start the day before
+        view = view / view.iloc[0] * 100          # every period starts at ₹100
+        years = (view.index[-1] - view.index[0]).days / 365.25
+        yearly = years > 1.05                     # CAGR only makes sense beyond a year
+
+        def growth(col: str) -> float:
+            return cagr(view[col]) if yearly else view[col].iloc[-1] / 100 - 1
+
+        word = "CAGR" if yearly else "return"
+        span = (f"Average yearly growth over {years:.1f} years" if yearly
+                else f"Total change from {view.index[0]:%d %b %Y} to {view.index[-1]:%d %b %Y}")
+        has_base = "baseline" in view
+        ai_g, ix_g = growth("ai"), growth("index")
         with st.container(horizontal=True):
-            st.metric(":material/smart_toy: AI CAGR", f"{ai_c:+.1%}", border=True, help=span)
-            st.metric(f":material/account_balance: {bench} CAGR", f"{ix_c:+.1%}", border=True, help=span)
+            st.metric(f":material/smart_toy: AI {word}", f"{ai_g:+.1%}", border=True, help=span)
+            st.metric(f":material/account_balance: {bench} {word}", f"{ix_g:+.1%}", border=True, help=span)
             if has_base:
-                st.metric(":material/groups: All members CAGR", f"{base_c:+.1%}", border=True,
+                base_g = growth("baseline")
+                st.metric(f":material/groups: All members {word}", f"{base_g:+.1%}", border=True,
                           help=f"{span}, holding every one of today's index members in equal amounts. "
                                "It shares the simulation's advantages, so it's the fair yardstick.")
-                st.metric(":material/insights: AI's real edge", f"{(ai_c - base_c) * 100:+.1f} pts a year",
-                          border=True, help="AI CAGR minus the all-members CAGR: what the AI's choices added")
+                st.metric(":material/insights: AI's real edge",
+                          f"{(ai_g - base_g) * 100:+.1f} pts" + (" a year" if yearly else ""), border=True,
+                          help=f"AI {word} minus the all-members {word}: what the AI's choices added")
             else:
-                st.metric(":material/compare_arrows: Difference", f"{(ai_c - ix_c) * 100:+.1f} pts a year",
-                          border=True, help="AI CAGR minus index CAGR, in percentage points")
-        names = {"ai": ai_name, "baseline": all_name, "index": bench}
-        order = [names[c] for c in ("ai", "baseline", "index") if c in bt]
-        long = bt.rename(columns=names).reset_index(names="Date").melt(
-            "Date", var_name="Series", value_name="Value")
-        chart = alt.Chart(long).mark_line(strokeWidth=2.5).encode(
+                st.metric(":material/compare_arrows: Difference",
+                          f"{(ai_g - ix_g) * 100:+.1f} pts" + (" a year" if yearly else ""), border=True,
+                          help=f"AI {word} minus index {word}, in percentage points")
+
+        names = {"ai": f"AI {PF_LABELS[pf]}", "baseline": "All members (equal weight)", "index": bench}
+        order = [names[c] for c in ("ai", "baseline", "index") if c in view]
+        wide = view.rename(columns=names).reset_index(names="Date")
+        long = wide.melt("Date", var_name="Series", value_name="Value")
+        date_fmt = "%d %b %Y"
+        # Hover (or press and hold on a phone): a guide line follows the pointer and shows all values.
+        hover = alt.selection_point(nearest=True, on="pointerover", fields=["Date"], empty=False,
+                                    clear="pointerout")
+        lines = alt.Chart(long).mark_line(strokeWidth=1.8).encode(
             x=alt.X("Date:T", title=None),
             y=alt.Y("Value:Q", title="Value of ₹100", scale=alt.Scale(zero=False)),
-            color=alt.Color("Series:N", title=None, sort=order, legend=alt.Legend(orient="top", labelLimit=300),
+            color=alt.Color("Series:N", title=None, sort=order, legend=alt.Legend(orient="top", labelLimit=300, symbolType="stroke", symbolStrokeWidth=3),
                             scale=alt.Scale(domain=order, range=["#6366F1", "#F59E0B", "#94A3B8"][:len(order)])),
             strokeDash=alt.StrokeDash("Series:N", sort=order, legend=None,
                                       scale=alt.Scale(domain=order, range=[[1, 0], [6, 4], [1, 0]][:len(order)])),
-            tooltip=[alt.Tooltip("Date:T", format="%b %Y"), "Series:N",
-                     alt.Tooltip("Value:Q", format=",.1f")],
         )
-        st.altair_chart(chart.properties(height=320),
+        dots = lines.mark_point(filled=True, size=70).encode(
+            opacity=alt.condition(hover, alt.value(1), alt.value(0)))
+        guide = alt.Chart(wide).mark_rule(color="#94A3B8", strokeWidth=1).encode(
+            x="Date:T",
+            opacity=alt.condition(hover, alt.value(0.7), alt.value(0)),
+            tooltip=[alt.Tooltip("Date:T", title="Date", format=date_fmt)]
+                    + [alt.Tooltip(f"{c}:Q", title=c, format=",.1f") for c in order],
+        ).add_params(hover)
+        st.altair_chart(alt.layer(lines, dots, guide).properties(height=320),
                         alt=f"Value of 100 rupees in the AI's {PF_LABELS[pf]} picks, in all index members "
-                            f"held equally, and in the {bench}")
-        st.caption(f"Simulated from {bt.index[0]:%b %Y} to {bt.index[-1]:%b %Y}: at each month-end the AI "
+                            f"held equally, and in the {bench}, over the chosen period")
+        st.caption(f"Simulated from {bt.index[0]:%b %Y} to {bt.index[-1]:%b %Y}; each period starts at ₹100. "
+                   "Hover over the chart (or press and hold on a phone) to read the values. At each month-end the AI "
                    f"picks its top {n} using only the prices and published results available then, "
                    "keeps each one until it falls below the holding buffer, and replaces leavers with "
                    "the best new picks, splitting the money equally. Because it uses today's index members, "

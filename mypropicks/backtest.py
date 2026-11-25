@@ -96,13 +96,23 @@ def run_backtest(portfolio: str, cfg: dict, closes: pd.DataFrame, vols: pd.DataF
             pos[s] = cash / len(buys)
         if buys:
             cash = 0.0
-        for s in pos:
-            pos[s] *= 1 + period_return(closes, [s], t0, t1)
         listed = [s for s in closes.columns if pd.notna(closes.at[t0, s])]
-        every *= 1 + period_return(closes, listed, t0, t1)  # an index fund rebalances
-        ai = cash + sum(pos.values())
-        rows.append({"date": t1, "ai": round(ai, 4), "baseline": round(every, 4),
-                     "index": round(float(idx.asof(t1)) / base * 100, 4)})
+        # Day by day through the month, so the chart can zoom in to weeks. A stock with no price
+        # on a day keeps its last price; one that stopped trading counts as held cash (0%).
+        cols = list(dict.fromkeys(listed + list(pos)))
+        filled = closes.loc[:t1, cols].ffill()
+        span = filled.loc[filled.index >= t0]
+        growth = (span / span.iloc[0]).fillna(1.0)
+        start_every = every
+        for d in span.index[1:]:
+            g = growth.loc[d]
+            ai = cash + sum(v * g[s] for s, v in pos.items())
+            every = start_every * float(g[listed].mean())   # an index fund rebalances monthly
+            rows.append({"date": d, "ai": round(ai, 4), "baseline": round(every, 4),
+                         "index": round(float(idx.asof(d)) / base * 100, 4)})
+        last = growth.iloc[-1]
+        for s in pos:
+            pos[s] *= float(last[s])
     return pd.DataFrame(rows).set_index("date")
 
 

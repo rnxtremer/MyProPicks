@@ -186,7 +186,8 @@ with tabs[3]:
 # ---- how the AI did ----
 with tabs[4]:
     st.markdown("Each portfolio's tab on **Portfolio analysis** has a **How the AI did** chart: what "
-                "₹100 would have grown to over the last 3 years if you had followed the AI every month.")
+                "₹100 would have grown to if you had followed the AI, tracked every trading day over the "
+                "last 3 years.")
     c1, c2, c3 = st.columns(3)
     with c1.container(border=True, height="stretch"):
         st.markdown("**:violet[:material/smart_toy: The AI line]**")
@@ -195,14 +196,30 @@ with tabs[4]:
                    "best new ones with that money, and leaves the rest untouched, as you would.")
     with c2.container(border=True, height="stretch"):
         st.markdown("**:orange[:material/groups: All members (dashed)]**")
-        st.caption("Buys every one of today's index members equally, with no choosing at all. It's the "
-                   "fair yardstick for the AI.")
+        st.caption("Buys every one of today's index members equally, with no choosing at all, and "
+                   "rebalances back to equal amounts each month, like an index fund. It's the fair "
+                   "yardstick for the AI.")
     with c3.container(border=True, height="stretch"):
         st.markdown("**:gray[:material/account_balance: The index]**")
         st.caption("Nifty 50 for the Nifty 20, Nifty Midcap 150 for the Midcap 30, Nifty Smallcap 250 "
                    "for the Smallcap 50.")
-    st.markdown("**The numbers:** **CAGR** is the average yearly growth. **AI's real edge** is the AI's "
-                "CAGR minus the all-members CAGR: what the AI's choices really added.")
+    st.markdown("**:material/touch_app: Reading the chart**")
+    r1, r2 = st.columns(2)
+    with r1.container(border=True, height="stretch"):
+        st.markdown("**:material/date_range: Pick a period**")
+        st.caption("Use the buttons next to the title: **1D, 1W, 1M, 3M, 6M, 1Y, 2Y** or **Max** "
+                   "(the full 3 years). Every period restarts all three lines at ₹100, so you compare "
+                   "them from the same starting point.")
+    with r2.container(border=True, height="stretch"):
+        st.markdown("**:material/ads_click: Hover for values**")
+        st.caption("Move the mouse over the chart (or press and hold on a phone). A guide line follows "
+                   "it and shows that day's date and the value of all three lines.")
+    st.markdown("**The numbers above the chart** change with the period:\n"
+                "- **Longer than a year:** **CAGR**, the average yearly growth, and **AI's real edge** "
+                "in points *a year* (AI CAGR − all-members CAGR).\n"
+                "- **A year or less:** plain **return** for that period, and the edge in points "
+                "(AI return − all-members return). Yearly rates over a few days or weeks would be "
+                "misleading, so they aren't shown.")
     st.info("The simulation uses today's index members, so companies that dropped out are missing; it "
             "holds equal amounts; and stock prices include dividends while the index doesn't. All of "
             "that helps both the AI and the all-members line beat the index. That's why the fair "
@@ -212,7 +229,8 @@ with tabs[4]:
                 "targets aren't used, because their history isn't available.\n"
                 "- **Not included:** brokerage, taxes and the gap between the price you see and the price "
                 "you get.\n"
-                "- **Updated:** every month, by the review.\n"
+                "- **Updated:** every month, by the review. Values are recorded for every trading day; "
+                "the AI only changes its holdings at month-ends.\n"
                 "- **Past results don't promise future returns.**")
 
 # ---- trades & P&L ----

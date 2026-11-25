@@ -83,3 +83,12 @@ def test_info_shares_add_up_and_search_works(fake_world):
     labels = [e.label for e in at.expander]
     assert any(x.startswith("ROE") for x in labels)
     assert len(labels) < 10  # filtered, not the whole glossary
+
+
+def test_theme_file_is_valid():
+    """A broken config.toml silently drops the whole theme, so check it parses."""
+    import tomllib
+    from pathlib import Path
+    cfg = tomllib.loads((Path(__file__).resolve().parents[1] / "dashboard/.streamlit/config.toml")
+                        .read_text(encoding="utf-8"))
+    assert cfg["theme"]["metricValueFontSize"] == "1.6rem"
