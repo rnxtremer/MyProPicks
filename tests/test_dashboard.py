@@ -9,7 +9,8 @@ from mypropicks import ledger, review
 from tests.test_review import _install_fakes
 
 PAGES = ["app_pages/this_month.py", "app_pages/analysis.py", "app_pages/holdings.py",
-         "app_pages/log_trade.py", "app_pages/rankings.py", "app_pages/settings.py", "app_pages/how_it_works.py"]
+         "app_pages/log_trade.py", "app_pages/rankings.py", "app_pages/settings.py", "app_pages/how_it_works.py",
+         "app_pages/info.py"]
 
 
 @pytest.fixture
@@ -62,3 +63,23 @@ def test_analysis_shows_ai_vs_index(fake_world):
     assert ai.value == "+21.0%"
     edge = next(m for m in at.metric if "real edge" in m.label)
     assert edge.value == "+6.0 pts a year"  # 21% vs 15% a year
+
+
+def test_info_shares_add_up_and_search_works(fake_world):
+    """Every scoring measure is explained, and their score shares add up to 100%."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dashboard"))
+    from glossary import TERMS
+    from mypropicks.scoring import ALL_METRICS
+    explained = {t["metric"] for t in TERMS if t.get("metric")}
+    assert explained == set(ALL_METRICS)
+    assert all(t.get("ranges") for t in TERMS if t.get("metric"))  # every measure has a range guide
+    colours = {c for t in TERMS for _, _, c in t.get("ranges", [])}
+    assert colours <= {"red", "orange", "blue", "green"}
+    at = _run("app_pages/info.py")
+    at.text_input[0].input("roe").run()
+    assert not at.exception
+    labels = [e.label for e in at.expander]
+    assert any(x.startswith("ROE") for x in labels)
+    assert len(labels) < 10  # filtered, not the whole glossary

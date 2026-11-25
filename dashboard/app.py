@@ -10,5 +10,6 @@ pages = [
     st.Page("app_pages/rankings.py", title="Full rankings", icon=":material/leaderboard:"),
     st.Page("app_pages/settings.py", title="Settings & review", icon=":material/settings:"),
     st.Page("app_pages/how_it_works.py", title="How it works", icon=":material/school:"),
+    st.Page("app_pages/info.py", title="Info", icon=":material/menu_book:"),
 ]
 st.navigation(pages).run()

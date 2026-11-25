@@ -33,11 +33,11 @@ with st.container(horizontal=True):
 # ---- the monthly cycle ----
 st.subheader("The monthly cycle")
 steps = [
-    (":material/download:", "1. Fetch", "Downloads NSE's latest index lists, a year of prices and each company's financials."),
+    (":material/download:", "1. Fetch", "Downloads NSE's latest index lists, prices (a year daily, 5 years monthly) and each company's financials."),
     (":material/fact_check:", "2. Check", "Drops stocks that fail NSE-style trading checks."),
     (":material/leaderboard:", "3. Score", "Scores every stock in 5 areas and ranks them."),
-    (":material/swap_horiz:", "4. Compare", "Compares the new top N with what you hold (or last month's list)."),
-    (":material/receipt_long:", "5. Report", "Writes the SELL and BUY list, with reasons and suggested quantities."),
+    (":material/swap_horiz:", "4. Compare", "Compares the new top N with last month's list, and with what you hold on your private page."),
+    (":material/receipt_long:", "5. Report", "Writes the SELL and BUY list with reasons, and updates the 3-year AI vs index chart."),
     (":material/edit_note:", "6. You act", "You place the trades with your broker and log them here."),
 ]
 with st.container(horizontal=True):
@@ -48,6 +48,7 @@ with st.container(horizontal=True):
 
 tabs = st.tabs([":material/fact_check: Eligibility", ":material/leaderboard: Scoring",
                 ":material/balance: Fair value", ":material/swap_horiz: Monthly changes",
+                ":material/show_chart: How the AI did",
                 ":material/account_balance_wallet: Your trades & P&L",
                 ":material/dashboard: Dashboard pages", ":material/info: Data & limits"])
 
@@ -170,8 +171,39 @@ with tabs[3]:
                 "proceeds and spare cash (or your capital, if you hold nothing yet) are split equally "
                 "and rounded down to whole shares.")
 
-# ---- trades & P&L ----
+# ---- how the AI did ----
 with tabs[4]:
+    st.markdown("Each portfolio's tab on **Portfolio analysis** has a **How the AI did** chart: what "
+                "₹100 would have grown to over the last 3 years if you had followed the AI every month.")
+    c1, c2, c3 = st.columns(3)
+    with c1.container(border=True, height="stretch"):
+        st.markdown("**:violet[:material/smart_toy: The AI line]**")
+        st.caption("At each month-end it ranks the stocks using only the prices and annual results "
+                   "available on that date, buys the top 20 / 30 / 50 equally and holds them for a month.")
+    with c2.container(border=True, height="stretch"):
+        st.markdown("**:orange[:material/groups: All members (dashed)]**")
+        st.caption("Buys every one of today's index members equally, with no choosing at all. It's the "
+                   "fair yardstick for the AI.")
+    with c3.container(border=True, height="stretch"):
+        st.markdown("**:gray[:material/account_balance: The index]**")
+        st.caption("Nifty 50 for the Nifty 20, Nifty Midcap 150 for the Midcap 30, Nifty Smallcap 250 "
+                   "for the Smallcap 50.")
+    st.markdown("**The numbers:** **CAGR** is the average yearly growth. **AI's real edge** is the AI's "
+                "CAGR minus the all-members CAGR: what the AI's choices really added.")
+    st.info("The simulation uses today's index members, so companies that dropped out are missing; it "
+            "holds equal amounts; and stock prices include dividends while the index doesn't. All of "
+            "that helps both the AI and the all-members line beat the index. That's why the fair "
+            "comparison is the AI against the dashed line, not against the index.",
+            title="Why the index is easy to beat here", icon=":material/lightbulb:")
+    st.markdown("- **No look-ahead:** annual results count only 90 days after the year ends; analyst "
+                "targets aren't used, because their history isn't available.\n"
+                "- **Not included:** brokerage, taxes and the gap between the price you see and the price "
+                "you get.\n"
+                "- **Updated:** every month, by the review.\n"
+                "- **Past results don't promise future returns.**")
+
+# ---- trades & P&L ----
+with tabs[5]:
     st.markdown("MyProPicks never trades for you. You buy and sell with your own broker, then tell it "
                 "what you did, in either of two ways:")
     c1, c2 = st.columns(2)
@@ -189,31 +221,26 @@ with tabs[4]:
                 "before anything is saved.")
 
 # ---- dashboard pages ----
-with tabs[5]:
+with tabs[6]:
     st.table({
         ":material/event: This month": "The latest review: what to sell, what to buy, and why",
-        ":material/analytics: Portfolio analysis": "Each current list with live price, fair value, valuation label, health and a detail card per stock",
+        ":material/analytics: Portfolio analysis": "Each current list with live price, fair value, valuation label, health, a detail card per stock, and the 3-year AI vs index chart",
         ":material/account_balance_wallet: My holdings & P&L": "Private. Your own moves this month, what you own, its value, profit or loss, and the value over time vs the index",
         ":material/edit_note: Log a trade": "Private. Record a buy or sell",
         ":material/leaderboard: Full rankings": "Every stock in each index with every score",
         ":material/settings: Settings & review": "Private. Set your capital, run a review now, refresh the at-risk check",
         ":material/school: How it works": "This page",
+        ":material/menu_book: Info": "Every term used in the app, explained simply: what it is, how it's worked out and how much it matters",
     }, border="horizontal")
     st.caption(":material/lock: Private pages ask for the app password, so your holdings, trades "
                "and capital stay yours even when the app link is public.")
 
 # ---- data & limits ----
-with tabs[6]:
+with tabs[7]:
     st.markdown("- **Index lists** come from NSE (niftyindices.com).\n"
                 "- **Prices and financials** come from Yahoo Finance, free and delayed by about 15 minutes.\n"
                 "- **Benchmarks:** Nifty 50 (for the Nifty 20), Nifty Midcap 150 and Nifty Smallcap 250.\n"
-                "- **How the AI did (3-year chart):** at each month-end over the last 3 years, the model "
-                "ranks today's index members using only the prices and annual results available then "
-                "(results count from 90 days after the year ends; no analyst targets), buys the top N "
-                "equally and holds them for a month. Because it uses today's index members, stocks that "
-                "dropped out are missing, so it looks somewhat better than reality. No costs or taxes. "
-                "The dashed **all members** line buys every one of today's members equally; it shares "
-                "those advantages, so the gap between it and the AI is what the AI really added.\n"
+                "- **How the AI did (3-year chart):** see the *How the AI did* tab.\n"
                 "- **Speed:** the first review downloads data for about 500 stocks and takes around 35–40 "
                 "minutes; later runs reuse cached data and take a few minutes.\n"
                 "- **Gaps:** free data sometimes misses a figure; such stocks are scored on what's "
