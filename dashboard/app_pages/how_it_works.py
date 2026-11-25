@@ -101,16 +101,28 @@ with tabs[1]:
 
 # ---- fair value ----
 with tabs[2]:
-    st.markdown("Fair value is the **average of up to five valuation methods**, the same idea "
-                "InvestingPro describes for its own fair value.")
-    st.table({
-        "Sector P/E": "Earnings per share × the median P/E of its sector",
-        "Sector P/B": "Book value per share × the median P/B of its sector",
-        "Sector EV/EBITDA": "EBITDA × the sector's median EV/EBITDA, minus net debt, per share",
-        "Discounted cash flow": f"Free cash flow grown for {fv.get('dcf_years', 5)} years, discounted at "
-                                f"{fv['dcf_discount']:.0%}, with {fv['dcf_terminal']:.0%} growth after that",
-        "Analyst target": "The average analyst price target, when one exists",
-    }, border="horizontal")
+    fw = fv.get("weights", {})
+    st.markdown("Fair value is a **weighted average of up to six valuation methods**. Each one "
+                "estimates what a share is worth; methods that proved more reliable count more.")
+    st.dataframe(pd.DataFrame([
+        ("Its own past P/E", fw.get("own_pe", 1), "Today's earnings per share × the P/E the stock itself traded at, at each of its last few year-ends (the median)"),
+        ("Its own past P/B", fw.get("own_pb", 1), "Today's book value per share × the P/B the stock itself traded at in past years"),
+        ("Analyst target", fw.get("analyst_target", 1), f"The average analyst price target; counts once if fewer than {fv.get('analyst_min', 5)} analysts cover the stock"),
+        ("Sector P/E", fw.get("sector_pe", 1), "Earnings per share × the median P/E of its sector"),
+        ("Sector P/B", fw.get("sector_pb", 1), "Book value per share × the median P/B of its sector"),
+        ("Sector EV/EBITDA", fw.get("sector_ev_ebitda", 1), "EBITDA × the sector's median EV/EBITDA, minus net debt, per share"),
+    ], columns=["Method", "Counts", "How it works"]), hide_index=True,
+        column_config={"Counts": st.column_config.NumberColumn("Counts", format="×%g"),
+                       "How it works": st.column_config.TextColumn(width="large")},
+        alt="Fair value methods and how much each counts")
+    st.markdown("- **Why these weights:** checked against analysts' targets on about 500 NSE stocks, a "
+                "stock's own past P/E and P/B were the most reliable guides, sector multiples less so. "
+                "A discounted-cash-flow model on free data was far off (typically about 3× too low), "
+                "so it's left out.\n"
+                "- **Geometric average:** one very high estimate can't drag the result as far as an "
+                "ordinary average would.\n"
+                "- **Confidence:** **High** when 3 or more methods agree within 1.6×, **Medium** within "
+                "2.5×, otherwise **Low**. A Low-confidence fair value is a rough guess.")
     c1, c2, c3 = st.columns(3)
     with c1.container(border=True, height="stretch"):
         st.markdown(":green-badge[:material/trending_up: Undervalued]")
@@ -123,8 +135,10 @@ with tabs[2]:
         st.caption(f"Price is more than {fv['band']:.0%} above fair value.")
     st.markdown("- **Odd results are dropped:** with 3 or more methods, any method more than 3× or under ⅓ "
                 "of their median is ignored.\n"
-                "- **Banks and lenders** skip discounted cash flow and EV/EBITDA, because borrowing is "
-                "their raw material and those methods give nonsense for them.")
+                "- **Banks and lenders** skip EV/EBITDA, because borrowing is their raw material and it "
+                "gives nonsense for them.\n"
+                "- **It's an estimate, not a true price.** Nobody knows a stock's real fair value; treat "
+                "this as one guide among many.")
 
 # ---- monthly changes ----
 with tabs[3]:

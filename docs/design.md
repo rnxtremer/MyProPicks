@@ -129,13 +129,23 @@ meaningful, within its sector**. Each category is the average of its metrics:
 - Ties are broken by price momentum, then by market cap.
 
 ### 6.2c Fair value (also used in the analysis page, 6.9)
-Fair value is the average of the methods that have data, as InvestingPro does:
-1. **Sector P/E:** trailing EPS × sector median P/E.
-2. **Sector P/B:** book value per share × sector median P/B.
-3. **Sector EV/EBITDA:** implied price from the sector median EV/EBITDA.
-4. **Simple DCF:** 5-year free-cash-flow projection at the stock's own 3-yr growth (capped
-   at 25%, floored at 0%), 12% discount rate, 5% terminal growth (all in config).
-5. **Analyst target:** mean analyst target price, where available.
+Fair value is a weighted geometric mean of the methods that have data (weights in
+`fair_value.weights` in config):
+1. **Own past P/E (×2):** trailing EPS × the median P/E the stock traded at on its last
+   few financial year-ends (5 years of monthly closes; per-share figures use today's share
+   count because prices are split-adjusted). Needs at least two years.
+2. **Own past P/B (×2):** book value per share × its own median past P/B.
+3. **Analyst target (×2):** mean analyst target; counts ×1 with fewer than 5 analysts.
+4. **Sector P/E (×1):** trailing EPS × sector median P/E.
+5. **Sector P/B (×1):** book value per share × sector median P/B.
+6. **Sector EV/EBITDA (×1):** implied price from the sector median EV/EBITDA (not for lenders).
+7. **Simple DCF (×0, off):** 5-year free-cash-flow projection. Checked on the November 2026
+   data it came out a median ~2.9× below analyst targets, so its weight is 0.
+
+The weights come from a check against analysts' targets on ~500 stocks: leaving the analyst
+target out, the old equal-weight five-method average was a median 37% from the target; the
+new mix is ~20%. **Confidence:** High when 3+ methods agree within 1.6×, Medium within 2.5×,
+else Low.
 
 Outliers are dropped first: any method more than 3× or less than ⅓ of the median of the
 others. **Label:** undervalued if LTP is more than 10% below fair value, overvalued if more

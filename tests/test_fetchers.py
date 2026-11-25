@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import pandas as pd
 import pytest
@@ -118,3 +119,38 @@ def test_extract_metrics_missing_fields_are_none():
     m = fundamentals.extract_metrics(raw)
     assert m["roe"] is None and m["rev_cagr3"] is None and m["pe"] is None
     assert m["sector"] == "X"
+
+
+def _hist_raw():
+    """Two financial years; prices adjusted for splits, so per-share values use current shares."""
+    return {
+        "info": {"sharesOutstanding": 100.0},
+        "financials": {"Net Income Common Stockholders": {"2025-03-31": 1000.0, "2024-03-31": 800.0}},
+        "balance_sheet": {"Stockholders Equity": {"2025-03-31": 5000.0, "2024-03-31": 4000.0}},
+        "monthly_close": {"2024-03-01": 160.0, "2024-04-01": 170.0, "2025-03-01": 250.0,
+                          "2025-11-01": 300.0},
+    }
+
+
+def test_own_history_multiples():
+    m = fundamentals.extract_metrics(_hist_raw())
+    # FY24: price 160 / EPS 8 = 20; FY25: 250 / 10 = 25 -> median 22.5
+    assert m["own_pe_hist"] == pytest.approx(22.5)
+    # FY24: 160 / BVPS 40 = 4; FY25: 250 / 50 = 5 -> median 4.5
+    assert m["own_pb_hist"] == pytest.approx(4.5)
+
+
+def test_own_history_needs_two_years():
+    raw = _hist_raw()
+    raw["monthly_close"] = {"2025-03-01": 250.0}
+    m = fundamentals.extract_metrics(raw)
+    assert m["own_pe_hist"] is None and m["own_pb_hist"] is None
+
+
+def test_old_cache_without_price_history_is_refetched(tmp_data, monkeypatch):
+    f = tmp_data / "cache" / "fundamentals" / "TCS.json"
+    f.parent.mkdir(parents=True)
+    f.write_text(json.dumps({"info": {"marketCap": 1}, "financials": {}}), encoding="utf-8")
+    fresh = {**_hist_raw(), "info": {"marketCap": 2}}
+    monkeypatch.setattr(fundamentals, "_download", lambda s: fresh)
+    assert fundamentals.get_fundamentals("TCS")["info"]["marketCap"] == 2

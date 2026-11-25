@@ -63,6 +63,13 @@ DEFAULTS: dict = {
         "dcf_growth_min": 0.0,
         "dcf_growth_max": 0.25,
         "outlier_ratio": 3.0,
+        # How much each method counts in the (geometric) average. Checked against analysts'
+        # targets on 500 NSE stocks: the stock's own past P/E and P/B were the most reliable,
+        # sector multiples less so, and DCF on free data was far off, so it is left out.
+        "weights": {"own_pe": 2, "own_pb": 2, "sector_pe": 1, "sector_pb": 1,
+                    "sector_ev_ebitda": 1, "dcf": 0, "analyst_target": 2},
+        # An analyst target counts fully only when at least this many analysts cover the stock.
+        "analyst_min": 5,
     },
     "low_data_threshold": 0.60,
 }

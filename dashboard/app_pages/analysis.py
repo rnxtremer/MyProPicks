@@ -90,6 +90,7 @@ for r in lst.itertuples():
         "upside": (fv / ltp - 1) if has else None,
         "valuation": label,
         "fv_methods": int(k.get("fv_n_methods") or 0),
+        "fv_conf": [k.get("fv_confidence")] if isinstance(k.get("fv_confidence"), str) else [],
         "health": k.get("health"),
         "live_rank": live.at[s, "rank"] if s in live.index else None,
         "pe": k.get("pe"),
@@ -131,8 +132,8 @@ view["valuation"] = view["valuation"].map(lambda v: [v])
 COLUMN_SETS = {
     "Overview": ["rank", "symbol", "name", "sector", "trend", "ltp", "day_chg", "since_added",
                  "valuation", "health"],
-    "Valuation": ["rank", "symbol", "ltp", "fair_value", "upside", "valuation", "fv_methods",
-                  "pe", "pb", "div_yield"],
+    "Valuation": ["rank", "symbol", "ltp", "fair_value", "upside", "valuation", "fv_conf",
+                  "fv_methods", "pe", "pb", "div_yield"],
     "Fundamentals": ["rank", "symbol", "sector", "health", "roe", "debt_equity", "mcap_cr",
                      "from_52w_high", "from_52w_low"],
 }
@@ -170,6 +171,10 @@ st.dataframe(
                                                         color=VAL_COLORS),
         "fv_methods": st.column_config.NumberColumn("Methods", format="%d",
                                                     help="How many valuation methods were averaged"),
+        "fv_conf": st.column_config.MultiselectColumn(
+            "Confidence", options=["High", "Medium", "Low", "None"],
+            color=["#16A34A", "#2563EB", "#DC2626", "#6B7280"],
+            help="How closely the valuation methods agree. Low means treat the fair value with care."),
         "health": st.column_config.ProgressColumn("Health", min_value=0, max_value=5, format="%.1f"),
         "pe": st.column_config.NumberColumn("P/E", format="%.1f"),
         "pb": st.column_config.NumberColumn("P/B", format="%.1f"),
@@ -234,7 +239,8 @@ if pick:
                       f"{row['day_chg']:+.2%}" if pd.notna(row["day_chg"]) else None, border=True)
             st.metric("Fair value", f"₹{row['fair_value']:,.0f}" if pd.notna(row["fair_value"]) else "—",
                       f"{row['upside']:+.1%}" if pd.notna(row["upside"]) else None, border=True,
-                      help=f"{row['valuation']}, based on {row['fv_methods']} method(s)")
+                      help=f"{row['valuation']}, based on {row['fv_methods']} method(s). "
+                           f"Confidence: {(row['fv_conf'] or ['not rated'])[0]}")
             st.metric("Health score", f"{row['health']:.1f} / 5" if pd.notna(row["health"]) else "—",
                       border=True)
             st.metric("Since added", f"{row['since_added']:+.1%}" if pd.notna(row["since_added"]) else "—",
@@ -263,11 +269,20 @@ if pick:
         with c3:
             st.markdown("**:material/calculate: Fair value by method**")
             methods = json.loads(k.get("fv_methods") or "{}")
-            names = {"sector_pe": "Sector P/E", "sector_pb": "Sector P/B", "sector_ev_ebitda": "Sector EV/EBITDA",
+            names = {"own_pe": "Its own past P/E", "own_pb": "Its own past P/B",
+                     "sector_pe": "Sector P/E", "sector_pb": "Sector P/B", "sector_ev_ebitda": "Sector EV/EBITDA",
                      "dcf": "Discounted cash flow", "analyst_target": "Analyst target"}
+            fv_w = config()["fair_value"].get("weights", {})
             if methods:
-                st.table({names.get(m, m): f"₹{v:,.0f}" for m, v in methods.items()},
-                         border="horizontal")
+                st.table({f"{names.get(m, m)} (×{fv_w.get(m, 1):g})": f"₹{v:,.0f}"
+                          for m, v in methods.items()}, border="horizontal")
+                conf = (row["fv_conf"] or [None])[0]
+                if conf:
+                    st.caption(f"Confidence **{conf}**: "
+                               + {"High": "the methods agree closely.",
+                                  "Medium": "the methods roughly agree.",
+                                  "Low": "the methods disagree, so treat this fair value with care.",
+                                  "None": "no method had data."}.get(conf, ""))
             else:
                 st.caption("Not enough data for a fair value.")
         with c4:

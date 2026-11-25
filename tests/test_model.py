@@ -50,8 +50,36 @@ def test_outlier_dropped():
     med = {"pe": 10, "pb": 2, "ev_ebitda": 10}
     r = fair_value(m, med, 100, FV)
     assert "sector_ev_ebitda" not in r["methods"]
-    assert r["fair_value"] == pytest.approx(100.0)
+    # weighted geometric mean: P/E x1, P/B x1, analyst target x1 (fewer than 5 analysts)
+    assert r["fair_value"] == pytest.approx((100 * 110 * 90) ** (1 / 3))
     assert r["n_methods"] == 3
+
+
+def test_own_history_methods_and_weights():
+    """A stock's own past P/E and P/B count double; so does a target backed by 5+ analysts."""
+    m = {"eps": 10, "bvps": 50, "own_pe_hist": 12, "own_pb_hist": 2.2,
+         "target_mean": 125, "n_analysts": 8}
+    r = fair_value(m, {"pe": 10}, 100, FV)
+    assert r["methods"] == {"own_pe": 120.0, "own_pb": 110.0, "sector_pe": 100.0,
+                            "analyst_target": 125.0}
+    expected = (120 ** 2 * 110 ** 2 * 100 * 125 ** 2) ** (1 / 7)
+    assert r["fair_value"] == pytest.approx(expected)
+
+
+def test_dcf_left_out_by_default():
+    """DCF on free data was far off (median ~2.9x below analyst targets), so its weight is 0."""
+    m = {"fcf": 100.0, "fcf_cagr3": 0.10, "shares": 10.0, "net_debt": 0.0, "target_mean": 100}
+    r = fair_value(m, {}, 100, FV)
+    assert "dcf" not in r["methods"]
+
+
+def test_confidence_from_agreement():
+    close = {"eps": 10, "bvps": 50, "own_pe_hist": 10.5, "own_pb_hist": 2.1, "target_mean": 102}
+    assert fair_value(close, {"pe": 10, "pb": 2}, 100, FV)["confidence"] == "High"
+    assert fair_value({"eps": 10, "target_mean": 200}, {"pe": 10}, 100, FV)["confidence"] == "Medium"
+    assert fair_value({"eps": 10, "target_mean": 290}, {"pe": 10}, 100, FV)["confidence"] == "Low"
+    assert fair_value({"target_mean": 100}, {}, 100, FV)["confidence"] == "Low"
+    assert fair_value({}, {}, 100, FV)["confidence"] == "None"
 
 
 def test_fair_value_skips_negative_inputs():
@@ -68,9 +96,10 @@ def test_no_data_label():
     assert r["label"] == "No data" and r["fair_value"] is None
 
 
-def test_dcf_positive():
+def test_dcf_positive_when_weighted():
     m = {"fcf": 100.0, "fcf_cagr3": 0.10, "shares": 10.0, "net_debt": 0.0}
-    r = fair_value(m, {}, 100, FV)
+    cfg = {**FV, "weights": {**FV["weights"], "dcf": 1}}
+    r = fair_value(m, {}, 100, cfg)
     assert r["methods"]["dcf"] > 0
 
 

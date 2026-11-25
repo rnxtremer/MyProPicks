@@ -167,6 +167,7 @@ def build_rankings(portfolio: str, cfg: dict, progress: Progress | None = None) 
     metrics["fv_label"] = [fv_rows[s]["label"] for s in syms]
     metrics["fv_methods"] = [json.dumps(fv_rows[s]["methods"]) for s in syms]
     metrics["fv_n_methods"] = [fv_rows[s]["n_methods"] for s in syms]
+    metrics["fv_confidence"] = [fv_rows[s]["confidence"] for s in syms]
 
     scored = score_universe(metrics, elig, cfg["weights"], cfg["low_data_threshold"])
     table = scored.join(metrics.drop(columns=[c for c in scored.columns if c in metrics.columns]))

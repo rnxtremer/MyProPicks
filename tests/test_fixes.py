@@ -50,7 +50,7 @@ def test_outlier_rule_keeps_majority():
     r = fair_value({"eps": 10, "bvps": 55, "target_mean": 1000}, {"pe": 10, "pb": 2}, 100,
                    DEFAULTS["fair_value"])
     assert set(r["methods"]) == {"sector_pe", "sector_pb"}
-    assert r["fair_value"] == pytest.approx(105)
+    assert r["fair_value"] == pytest.approx((100 * 110) ** 0.5)
 
 
 # Important 3: one symbol with an extra newest day must not make everyone ineligible.

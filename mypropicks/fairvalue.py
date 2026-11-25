@@ -1,6 +1,7 @@
-"""Fair value: the average of several valuation methods, as InvestingPro describes its own."""
+"""Fair value: a weighted average of several valuation methods, as InvestingPro describes its own."""
 from __future__ import annotations
 
+import math
 import statistics
 
 import pandas as pd
@@ -51,8 +52,25 @@ def _dcf(m: dict, cfg: dict) -> float | None:
     return equity / shares if equity > 0 else None
 
 
+def _confidence(values: list[float]) -> str:
+    """How far the methods agree: High when 3+ agree within 1.6x, Medium within 2.5x."""
+    if not values:
+        return "None"
+    spread = max(values) / min(values)
+    if len(values) >= 3 and spread <= 1.6:
+        return "High"
+    if len(values) >= 2 and spread <= 2.5:
+        return "Medium"
+    return "Low"
+
+
 def fair_value(m: dict, med: dict, ltp: float, cfg: dict) -> dict:
+    weights = cfg.get("weights") or {}
     methods: dict[str, float] = {}
+    if _pos(m.get("eps")) and _pos(m.get("own_pe_hist")):
+        methods["own_pe"] = float(m["eps"]) * float(m["own_pe_hist"])
+    if _pos(m.get("bvps")) and _pos(m.get("own_pb_hist")):
+        methods["own_pb"] = float(m["bvps"]) * float(m["own_pb_hist"])
     if _pos(m.get("eps")) and _pos(med.get("pe")):
         methods["sector_pe"] = float(m["eps"]) * float(med["pe"])
     if _pos(m.get("bvps")) and _pos(med.get("pb")):
@@ -62,11 +80,13 @@ def fair_value(m: dict, med: dict, ltp: float, cfg: dict) -> dict:
         eq = float(med["ev_ebitda"]) * float(m["ebitda"]) - float(m.get("net_debt") or 0)
         if eq > 0:
             methods["sector_ev_ebitda"] = eq / float(m["shares"])
-    d = None if lender else _dcf(m, cfg)
-    if d:
-        methods["dcf"] = d
+    if weights.get("dcf", 1) > 0:
+        d = None if lender else _dcf(m, cfg)
+        if d:
+            methods["dcf"] = d
     if _pos(m.get("target_mean")):
         methods["analyst_target"] = float(m["target_mean"])
+    methods = {k: v for k, v in methods.items() if weights.get(k, 1) > 0}
 
     # Drop outliers: a method more than ratio x (or under 1/ratio of) the median of all methods.
     ratio = cfg["outlier_ratio"]
@@ -74,10 +94,21 @@ def fair_value(m: dict, med: dict, ltp: float, cfg: dict) -> dict:
         mid = statistics.median(methods.values())
         methods = {k: v for k, v in methods.items() if mid / ratio <= v <= mid * ratio}
 
+    confidence = _confidence(list(methods.values()))
     if not methods or not _pos(ltp):
         return {"methods": methods, "fair_value": None, "upside": None, "label": "No data",
-                "n_methods": len(methods)}
-    fv = sum(methods.values()) / len(methods)
+                "n_methods": len(methods), "confidence": confidence}
+
+    def weight(k: str) -> float:
+        w = float(weights.get(k, 1))
+        if k == "analyst_target" and (m.get("n_analysts") or 0) < cfg.get("analyst_min", 0):
+            w = min(w, 1.0)  # a target from only a couple of analysts counts once
+        return w
+
+    # Weighted geometric mean: one very high estimate can't drag the result as far as an
+    # ordinary average would.
+    total = sum(weight(k) for k in methods)
+    fv = math.exp(sum(weight(k) * math.log(v) for k, v in methods.items()) / total)
     upside = fv / ltp - 1
     band = cfg["band"]
     if ltp < fv * (1 - band):
@@ -87,4 +118,4 @@ def fair_value(m: dict, med: dict, ltp: float, cfg: dict) -> dict:
     else:
         label = "Fair"
     return {"methods": {k: round(v, 2) for k, v in methods.items()}, "fair_value": fv,
-            "upside": upside, "label": label, "n_methods": len(methods)}
+            "upside": upside, "label": label, "n_methods": len(methods), "confidence": confidence}

@@ -40,12 +40,25 @@ def _cache_file(symbol: str):
     return data_dir() / "cache" / "fundamentals" / f"{symbol.replace('&', '_and_')}.json"
 
 
+def _monthly_closes(t) -> dict:
+    """Five years of month-end closes (split-adjusted), for the stock's own past P/E and P/B."""
+    try:
+        h = t.history(period="5y", interval="1mo", auto_adjust=True)
+    except Exception:  # noqa: BLE001
+        return {}
+    if h is None or h.empty:
+        return {}
+    c = h["Close"].dropna()
+    return {str(k.date()): float(v) for k, v in c.items()}
+
+
 def _download(symbol: str) -> dict:
     import yfinance as yf
 
     t = yf.Ticker(yahoo(symbol))
     info = t.info or {}
     return {
+        "monthly_close": _monthly_closes(t),
         "info": {k: info.get(k) for k in INFO_KEYS},
         "financials": _frame_to_dict(t.financials),
         "cashflow": _frame_to_dict(t.cashflow),
@@ -58,7 +71,9 @@ def _download(symbol: str) -> dict:
 def get_fundamentals(symbol: str, max_age_days: int = 30) -> dict | None:
     f = _cache_file(symbol)
     if f.exists() and time.time() - f.stat().st_mtime < max_age_days * 86400:
-        return json.loads(f.read_text(encoding="utf-8"))
+        cached = json.loads(f.read_text(encoding="utf-8"))
+        if "monthly_close" in cached:  # older caches lack price history: fetch again
+            return cached
     try:
         raw = _download(symbol)
     except Exception:  # noqa: BLE001
@@ -114,6 +129,45 @@ def _num(v):
     return None if math.isnan(v) else v
 
 
+def _median(xs: list[float]) -> float | None:
+    xs = sorted(xs)
+    if not xs:
+        return None
+    mid = len(xs) // 2
+    return xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) / 2
+
+
+def _own_history(raw: dict) -> tuple[float | None, float | None]:
+    """Median P/E and P/B the stock itself traded at, at each past financial year end.
+
+    Per-share figures use today's share count, because the prices are split-adjusted; reported
+    EPS isn't always restated after a split or bonus. Needs at least two years, else None.
+    """
+    closes = raw.get("monthly_close") or {}
+    shares = _num((raw.get("info") or {}).get("sharesOutstanding"))
+    if not closes or not shares:
+        return None, None
+    months = sorted(closes)
+
+    def price_at(fy: str) -> float | None:
+        before = [m for m in months if m <= fy[:10]]  # the bar for the year-end month itself
+        return closes[before[-1]] if before else None
+
+    fin = raw.get("financials") or {}
+    ni = fin.get("Net Income Common Stockholders") or fin.get("Net Income") or {}
+    eq = (raw.get("balance_sheet") or {}).get("Stockholders Equity") or {}
+    pes, pbs = [], []
+    for fy, v in ni.items():
+        p, v = price_at(fy), _num(v)
+        if p and v and v > 0:
+            pes.append(p / (v / shares))
+    for fy, v in eq.items():
+        p, v = price_at(fy), _num(v)
+        if p and v and v > 0:
+            pbs.append(p / (v / shares))
+    return (_median(pes) if len(pes) >= 2 else None, _median(pbs) if len(pbs) >= 2 else None)
+
+
 def extract_metrics(raw: dict) -> dict:
     info = raw.get("info", {}) or {}
     fin = raw.get("financials", {}) or {}
@@ -140,6 +194,8 @@ def extract_metrics(raw: dict) -> dict:
     mcap = _num(info.get("marketCap"))
     de = _num(info.get("debtToEquity"))
     dy = _num(info.get("dividendYield"))
+
+    own_pe, own_pb = _own_history(raw)
 
     roe = _num(info.get("returnOnEquity"))
     if roe is None:
@@ -169,6 +225,9 @@ def extract_metrics(raw: dict) -> dict:
         "fcf": fcf,
         "fcf_cagr3": _cagr(cf, "Free Cash Flow"),
         "target_mean": _num(info.get("targetMeanPrice")),
+        "n_analysts": _num(info.get("numberOfAnalystOpinions")),
+        "own_pe_hist": own_pe,
+        "own_pb_hist": own_pb,
         "market_cap": mcap,
         "dividend_yield": dy / 100 if dy is not None else None,
         "high_52w": _num(info.get("fiftyTwoWeekHigh")),
