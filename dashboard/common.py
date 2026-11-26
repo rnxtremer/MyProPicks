@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -84,9 +85,49 @@ PF_KEYS = list(PORTFOLIOS)
 PF_LABELS = {k: v["label"] for k, v in PORTFOLIOS.items()}
 
 
+REPO_URL = "https://github.com/rnxtremer/MyProPicks"
+
+
+def _next_review(today: date) -> date:
+    """The monthly review runs on the 1st (08:00 IST)."""
+    return date(today.year + (today.month == 12), today.month % 12 + 1, 1)
+
+
 def footer() -> None:
+    """Site footer: what MyProPicks is, quick links, data sources and the disclaimer."""
+    st.space("large")
     st.divider()
-    st.caption(DISCLAIMER + " Prices from Yahoo Finance are delayed by about 15 minutes.")
+    about, explore, learn, data = st.columns([1.6, 1, 1, 1.2], gap="large")
+    with about:
+        st.markdown("**:material/insights: MyProPicks**")
+        st.caption("Rules-based stock picks for three Indian portfolios: Nifty 20, Midcap 30 and "
+                   "Smallcap 50, reviewed on the 1st of every month.")
+        rev = latest_review()
+        today = date.today()
+        nice = lambda d: f"{d.day} {d:%b %Y}"  # noqa: E731
+        badges = ([f":gray-badge[:material/event_available: Last review {nice(date.fromisoformat(rev.name))}]"]
+                  if rev else [])
+        badges.append(f":gray-badge[:material/update: Next review {nice(_next_review(today))}]")
+        st.markdown(" ".join(badges))
+    with explore:
+        st.markdown("**Explore**")
+        st.page_link("app_pages/analysis.py", label="Portfolio analysis")
+        st.page_link("app_pages/this_month.py", label="This month")
+        st.page_link("app_pages/rankings.py", label="Full rankings")
+    with learn:
+        st.markdown("**Learn**")
+        st.page_link("app_pages/how_it_works.py", label="How it works")
+        st.page_link("app_pages/info.py", label="Info: terms explained")
+        st.page_link(REPO_URL, label="Source code", icon=":material/code:")
+    with data:
+        st.markdown("**Data**")
+        st.caption("Prices and financials: Yahoo Finance, delayed by about 15 minutes.")
+        st.caption("Index members: NSE (niftyindices.com).")
+        st.caption("Benchmarks: Nifty 50, Nifty Midcap 150, Nifty Smallcap 250.")
+    st.divider()
+    with st.container(horizontal=True, vertical_alignment="top", gap="large"):
+        st.caption(f"© {date.today().year} MyProPicks", width="content")
+        st.caption(f":material/info: {DISCLAIMER}", width="stretch")
 
 
 def review_dirs() -> list[Path]:

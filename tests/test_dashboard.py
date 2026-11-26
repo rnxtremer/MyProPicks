@@ -135,3 +135,15 @@ def test_with_live_adds_todays_price():
     assert "XYZ" not in out and len(hist) == 2            # unknown symbols ignored, input untouched
     again = with_live(out, {"PNB": {"ltp": 147.0, "as_of": "2026-11-26 15:30"}})
     assert len(again) == 3 and again.at[pd.Timestamp("2026-11-26"), "PNB"] == 147.0
+
+
+def test_footer_next_review_and_links(fake_world):
+    import sys
+    sys.path.insert(0, "dashboard")
+    from common import _next_review
+    assert _next_review(date(2026, 11, 26)) == date(2026, 12, 1)
+    assert _next_review(date(2026, 12, 1)) == date(2027, 1, 1)
+    at = _run("app_pages/info.py")
+    assert not at.exception
+    text = " ".join(m.value for m in at.markdown)
+    assert "Next review" in text and "Explore" in text
