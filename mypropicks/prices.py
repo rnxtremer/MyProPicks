@@ -95,16 +95,52 @@ def index_history(ticker: str, start: str) -> pd.Series:
     return s
 
 
+def _live_one(symbol: str) -> dict | None:
+    """Yahoo's live price (about 15 minutes delayed) with its time and the previous close,
+    from one intraday request. None if Yahoo has nothing usable."""
+    import yfinance as yf
+
+    t = yf.Ticker(yahoo(symbol))
+    bars = t.history(period="1d", interval="5m")
+    m = t.history_metadata or {}
+    last, prev, when = m.get("regularMarketPrice"), m.get("chartPreviousClose") or m.get("previousClose"),         m.get("regularMarketTime")
+    if not (last and last > 0):                    # no live price: the last good 5-minute bar
+        bars = _clean(bars)
+        if bars.empty:
+            return None
+        last, when = float(bars["Close"].iloc[-1]), bars.index[-1]
+    when = pd.Timestamp(when) if when is not None else None
+    if when is not None and when.tz is not None:
+        when = when.tz_convert("Asia/Kolkata").tz_localize(None)
+    return {"ltp": float(last), "change_pct": (last / prev - 1) if prev and prev > 0 else None,
+            "as_of": when.strftime("%Y-%m-%d %H:%M") if when is not None else None, "live": True}
+
+
+def _clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop the blank or zero rows Yahoo sometimes sends."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    return df[df["Close"].notna() & (df["Close"] > 0)]
+
+
 def latest_quotes(symbols: list[str]) -> dict[str, dict]:
-    """Fresh last price and day change for a few symbols (about 15 minutes delayed)."""
+    """Live last price (about 15 minutes delayed), its time, and the change from the previous
+    day's close. Falls back to the last daily close if live data isn't available."""
     out = {}
     for sym in symbols:
         try:
-            df = _download_one(sym, 1)
-            df = df[df["Close"].notna() & (df["Close"] > 0)]  # Yahoo sometimes sends a blank last row
-            if len(df) >= 2:
-                last, prev = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
-                out[sym] = {"ltp": last, "change_pct": last / prev - 1, "as_of": str(df.index[-1].date())}
+            q = _live_one(sym)
         except Exception:  # noqa: BLE001
-            pass
+            q = None
+        if q is None:
+            try:
+                daily = _clean(_download_one(sym, 1))
+            except Exception:  # noqa: BLE001
+                daily = pd.DataFrame()
+            if len(daily) >= 2:
+                last, prev = float(daily["Close"].iloc[-1]), float(daily["Close"].iloc[-2])
+                q = {"ltp": last, "change_pct": last / prev - 1,
+                     "as_of": str(daily.index[-1].date()), "live": False}
+        if q:
+            out[sym] = q
     return out

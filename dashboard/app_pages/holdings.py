@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, fmt_inr, footer, my_moves,
-                    quotes, require_unlock, trades)
+                    prices_note, quotes, require_unlock, trades, with_live)
 from mypropicks import ledger
 from mypropicks.config import BENCHMARK_NAMES, BENCHMARKS
 from mypropicks.history import value_over_time
@@ -67,6 +67,7 @@ if st.button("Refresh prices", icon=":material/refresh:"):
 
 held_all = sorted({s for pf in PF_KEYS for s in ledger.held_symbols(t, pf)})
 q = quotes(tuple(held_all))
+st.caption(f":material/schedule: {prices_note(q)}")
 ltp = {s: v["ltp"] for s, v in q.items()}
 
 # ---- totals ----
@@ -123,7 +124,7 @@ for pf in PF_KEYS:
         with st.expander(f"Value over time vs {BENCHMARK_NAMES[pf]}", on_change="rerun") as exp:
             if exp.open:
                 syms = sorted(t.loc[t["portfolio"] == pf, "symbol"].unique())
-                closes, _, _ = get_prices(syms)
+                closes = with_live(get_prices(syms)[0], q)   # reach today's live price
                 v = value_over_time(t, pf, closes, float(cfg["capital"].get(pf) or 0))
                 if v.empty:
                     st.caption("Not enough price history yet.")

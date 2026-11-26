@@ -5,7 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, footer, fundamentals_raw,
-                    load_backtest, load_review_file, price_histories, quotes, snapshot_file)
+                    load_backtest, load_review_file, price_histories, prices_note, quotes, snapshot_file,
+                    with_live)
 from mypropicks.backtest import cagr
 from mypropicks.config import BENCHMARK_NAMES
 from mypropicks.fundamentals import quarterly_summary
@@ -54,7 +55,8 @@ live = pd.read_csv(snap_f).set_index("symbol") if use_snap else rk
 
 syms = lst["symbol"].tolist()
 q = quotes(tuple(syms))
-hist = price_histories(tuple(syms))
+st.caption(f":material/schedule: {prices_note(q)}")
+hist = with_live(price_histories(tuple(syms)), q)
 
 
 def trend(s: str) -> list[float]:
@@ -345,7 +347,7 @@ if pick:
         with c1:
             st.markdown("**:material/show_chart: Price vs 200-day average**")
             if pick in hist:
-                h = hist[[pick]].rename(columns={pick: "Price"})
+                h = hist[[pick]].dropna().rename(columns={pick: "Price"})
                 h["200-day average"] = h["Price"].rolling(200).mean()
                 st.line_chart(h.tail(252), height=280,
                               alt=f"{pick} price over the last year with its 200-day average")

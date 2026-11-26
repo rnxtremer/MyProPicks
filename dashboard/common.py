@@ -106,9 +106,31 @@ def current_review() -> Path | None:
     return latest_review()
 
 
-@st.cache_data(ttl=900, show_spinner="Fetching latest prices…")
+@st.cache_data(ttl=300, show_spinner="Fetching live prices…")
 def quotes(symbols: tuple[str, ...]) -> dict[str, dict]:
     return latest_quotes(list(symbols))
+
+
+def with_live(hist: pd.DataFrame, q: dict[str, dict]) -> pd.DataFrame:
+    """Daily closes with each stock's live price added as today's point (or replacing it), so
+    charts reach the latest price instead of stopping at the last cached close."""
+    out = hist.copy()
+    for s, v in q.items():
+        if s in out and v.get("as_of") and pd.notna(v.get("ltp")):
+            out.loc[pd.Timestamp(v["as_of"]).normalize(), s] = float(v["ltp"])
+    return out.sort_index()
+
+
+def prices_note(q: dict[str, dict]) -> str:
+    """One line saying how fresh the prices are, e.g. 'Live prices as of 26 Nov, 3:25 pm IST'."""
+    times = sorted(v["as_of"] for v in q.values() if v.get("as_of"))
+    if not times:
+        return "Live prices unavailable right now; showing prices from the review."
+    t = pd.Timestamp(times[-1])
+    if any(v.get("live") for v in q.values()):
+        return (f"Live prices as of {t:%d %b}, {t:%I:%M %p}".replace(" 0", " ").replace("AM", "am")
+                .replace("PM", "pm") + " IST (about 15 minutes delayed) · refreshed every 5 minutes")
+    return f"Prices from the last close ({t:%d %b %Y}); live prices unavailable right now"
 
 
 @st.cache_data(ttl=3600)

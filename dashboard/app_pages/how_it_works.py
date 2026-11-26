@@ -269,7 +269,8 @@ with tabs[6]:
 # ---- data & limits ----
 with tabs[7]:
     st.markdown("- **Index lists** come from NSE (niftyindices.com).\n"
-                "- **Prices and financials** come from Yahoo Finance, free and delayed by about 15 minutes.\n"
+                "- **Prices and financials** come from Yahoo Finance, free and delayed by about 15 minutes. "
+                "Live prices refresh every 5 minutes, and the time of the price is shown on the page.\n"
                 "- **Benchmarks:** Nifty 50 (for the Nifty 20), Nifty Midcap 150 and Nifty Smallcap 250.\n"
                 "- **How the AI did (3-year chart):** see the *How the AI did* tab.\n"
                 "- **Speed:** the first review downloads data for about 500 stocks and takes around 35–40 "

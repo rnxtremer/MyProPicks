@@ -160,7 +160,41 @@ def test_latest_quotes_skips_blank_last_row(monkeypatch):
     df = pd.DataFrame({"Close": [100.0, 110.0, np.nan], "Volume": [1, 1, 1]},
                       index=pd.to_datetime(["2026-11-20", "2026-11-23", "2026-11-25"]))
     monkeypatch.setattr(prices, "_download_one", lambda sym, months: df)
+    monkeypatch.setattr(prices, "_live_one", lambda sym: None)   # no live price: daily fallback
     q = prices.latest_quotes(["PNB"])["PNB"]
     assert q["ltp"] == 110.0
     assert q["change_pct"] == pytest.approx(0.10)
     assert q["as_of"] == "2026-11-23"
+
+
+class _FakeTicker:
+    def __init__(self, meta, bars):
+        self.history_metadata, self._bars = meta, bars
+
+    def history(self, **kw):
+        return self._bars
+
+
+def _fake_yf(monkeypatch, meta, bars):
+    import yfinance as yf
+    monkeypatch.setattr(yf, "Ticker", lambda t: _FakeTicker(meta, bars))
+
+
+def test_latest_quotes_uses_live_price(monkeypatch):
+    when = pd.Timestamp("2026-11-26 09:58:37", tz="UTC")
+    _fake_yf(monkeypatch, {"regularMarketPrice": 147.5, "chartPreviousClose": 148.61,
+                           "regularMarketTime": when}, pd.DataFrame({"Close": [147.5]}))
+    monkeypatch.setattr(prices, "_download_one", lambda sym, months: pytest.fail("no daily fetch"))
+    q = prices.latest_quotes(["PNB"])["PNB"]
+    assert q["ltp"] == 147.5 and q["live"]
+    assert q["change_pct"] == pytest.approx(147.5 / 148.61 - 1)
+    assert q["as_of"] == "2026-11-26 15:28"                     # shown in IST
+
+
+def test_latest_quotes_live_falls_back_to_last_bar(monkeypatch):
+    idx = pd.DatetimeIndex(["2026-11-26 15:20", "2026-11-26 15:25"]).tz_localize("Asia/Kolkata")
+    _fake_yf(monkeypatch, {"chartPreviousClose": 100.0},
+             pd.DataFrame({"Close": [101.0, np.nan]}, index=idx))
+    q = prices.latest_quotes(["PNB"])["PNB"]
+    assert q["ltp"] == 101.0 and q["as_of"] == "2026-11-26 15:20"
+    assert q["change_pct"] == pytest.approx(0.01)

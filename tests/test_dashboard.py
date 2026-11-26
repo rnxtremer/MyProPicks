@@ -111,3 +111,27 @@ def test_analysis_survives_missing_prices(fake_world, monkeypatch):
     st.cache_data.clear()
     at = _run("app_pages/analysis.py")
     assert not at.exception, [e.message for e in at.exception]
+
+
+def test_prices_note():
+    import sys
+    sys.path.insert(0, "dashboard")
+    from common import prices_note
+    assert "3:28 pm IST" in prices_note({"A": {"as_of": "2026-11-26 15:28", "live": True}})
+    assert "26 Nov 2026" in prices_note({"A": {"as_of": "2026-11-26", "live": False}})
+    assert "unavailable" in prices_note({})
+
+
+def test_with_live_adds_todays_price():
+    import sys
+    sys.path.insert(0, "dashboard")
+    from common import with_live
+    hist = pd.DataFrame({"PNB": [150.0, 148.61], "HAL": [4900.0, 4930.0]},
+                        index=pd.to_datetime(["2026-11-24", "2026-11-25"]))
+    out = with_live(hist, {"PNB": {"ltp": 147.5, "as_of": "2026-11-26 15:28"},
+                           "XYZ": {"ltp": 1.0, "as_of": "2026-11-26 15:28"}})
+    assert out.index[-1] == pd.Timestamp("2026-11-26")
+    assert out.at[pd.Timestamp("2026-11-26"), "PNB"] == 147.5
+    assert "XYZ" not in out and len(hist) == 2            # unknown symbols ignored, input untouched
+    again = with_live(out, {"PNB": {"ltp": 147.0, "as_of": "2026-11-26 15:30"}})
+    assert len(again) == 3 and again.at[pd.Timestamp("2026-11-26"), "PNB"] == 147.0

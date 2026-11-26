@@ -73,7 +73,8 @@ TERMS: list[dict] = [
          what="The most recent price at which one share changed hands on the stock exchange. It's "
               "simply \"the share price right now\".",
          how="Taken from Yahoo Finance, about 15 minutes behind the live market. Outside market hours "
-             "(9:15 am – 3:30 pm IST) it's the last closing price.",
+             "(9:15 am – 3:30 pm IST) it's the last closing price. The app fetches it again every 5 minutes "
+             "(or when you press Refresh prices) and shows the time of the price above the table.",
          price="This *is* the share price; every other measure is compared with it.",
          matters="Used to work out the gap to fair value, your profit or loss, and the day's move."),
     dict(group="basics", term="Day %",

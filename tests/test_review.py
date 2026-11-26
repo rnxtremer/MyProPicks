@@ -86,6 +86,7 @@ def _install_fakes(monkeypatch, n=30, failing=("S05", "S11", "S23")):
         return pd.DataFrame({"Close": close, "Volume": 1e6}, index=idx)
 
     monkeypatch.setattr(prices, "_download_one", fake_px)
+    monkeypatch.setattr(prices, "_live_one", lambda sym: None)  # no network: use the fake daily prices
 
     def fake_fund(sym, max_age_days=30):
         i = int(sym[1:])
