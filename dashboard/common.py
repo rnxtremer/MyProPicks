@@ -86,6 +86,8 @@ PF_LABELS = {k: v["label"] for k, v in PORTFOLIOS.items()}
 
 
 REPO_URL = "https://github.com/rnxtremer/MyProPicks"
+CREATOR = "Rudra Narayan Das"
+CREATOR_GITHUB = "https://github.com/rnxtremer"
 
 
 def _next_review(today: date) -> date:
@@ -109,6 +111,7 @@ def footer() -> None:
                   if rev else [])
         badges.append(f":gray-badge[:material/update: Next review {nice(_next_review(today))}]")
         st.markdown(" ".join(badges))
+        st.caption(f"Created by **{CREATOR}** · [:material/person: GitHub]({CREATOR_GITHUB})")
     with explore:
         st.markdown("**Explore**")
         st.page_link("app_pages/analysis.py", label="Portfolio analysis")
@@ -126,7 +129,7 @@ def footer() -> None:
         st.caption("Benchmarks: Nifty 50, Nifty Midcap 150, Nifty Smallcap 250.")
     st.divider()
     with st.container(horizontal=True, vertical_alignment="top", gap="large"):
-        st.caption(f"© {date.today().year} MyProPicks", width="content")
+        st.caption(f"© {date.today().year} MyProPicks · {CREATOR}", width="content")
         st.caption(f":material/info: {DISCLAIMER}", width="stretch")
 
 

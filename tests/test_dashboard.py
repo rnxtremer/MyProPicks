@@ -147,3 +147,4 @@ def test_footer_next_review_and_links(fake_world):
     assert not at.exception
     text = " ".join(m.value for m in at.markdown)
     assert "Next review" in text and "Explore" in text
+    assert any("Rudra Narayan Das" in c.value and "github.com/rnxtremer" in c.value for c in at.caption)
