@@ -199,3 +199,20 @@ def test_your_moves_use_the_buffer(tmp_data):
     assert [r["symbol"] for r in rows if r["action"] == "BUY"] == []
     rows, _ = review.personal_changes(table, ledger.load_trades(), "nifty20", 0, cutoff=20)
     assert [r["symbol"] for r in rows if r["action"] == "SELL"] == ["S24"]
+
+
+def test_sells_record_when_the_stock_was_added(tmp_data, monkeypatch):
+    _install_fakes(monkeypatch)
+    first = review.run_review(as_of=date(2026, 12, 1), portfolios=["nifty20"])
+    rk = pd.read_csv(first / "rankings_nifty20.csv", index_col=0)
+    lst = pd.read_csv(first / "list_nifty20.csv")
+    weak = rk.index[-1]                       # the worst-ranked stock: sure to be sold next time
+    lst.loc[len(lst) - 1, ["symbol", "added_on", "added_price"]] = [weak, "2026-11-03", 50.0]
+    lst.to_csv(first / "list_nifty20.csv", index=False)
+    second = review.run_review(as_of=date(2027, 1, 1), portfolios=["nifty20"])
+    ch = pd.read_csv(second / "changes_nifty20.csv")
+    sold = ch[ch["symbol"] == weak].iloc[0]
+    assert sold["action"] == "SELL"
+    assert sold["added_on"] == "2026-11-03" and sold["added_price"] == 50.0
+    bought = ch[ch["action"] == "BUY"].iloc[0]
+    assert bought["added_on"] == "2027-01-01" and bought["added_price"] == bought["price"]

@@ -159,3 +159,46 @@ def test_market_strip_shows_indices(fake_world):
     for name in ("Nifty 50", "Sensex", "Bank Nifty", "India VIX", "Nasdaq", "S&P 500"):
         assert name in labels
     assert any(m.value == "25,000.00" for m in at.metric)
+
+
+def test_leavers_and_journey_chart(fake_world):
+    import sys
+    sys.path.insert(0, "dashboard")
+    from common import journey_chart, leavers
+    from pathlib import Path
+    rev = sorted((fake_world / "reviews").iterdir())[-1]
+    later = rev.parent / "2027-01-01"
+    later.mkdir()
+    for f in rev.iterdir():
+        (later / f.name).write_bytes(f.read_bytes())
+    lst = pd.read_csv(rev / "list_nifty20.csv")
+    s = lst["symbol"].iloc[0]
+    # an old-style changes file (no added_* columns): looked up in the previous list
+    pd.DataFrame({"action": ["SELL"], "symbol": [s], "reason": ["dropped"], "qty": [None],
+                  "price": [123.0]}).to_csv(later / "changes_nifty20.csv", index=False)
+    out = leavers(Path(later), "nifty20")
+    assert out.at[0, "added_on"] == lst["added_on"].iloc[0]
+    assert out.at[0, "added_price"] == pytest.approx(lst["added_price"].iloc[0])
+    px = pd.Series([100.0, 105, 110, 108], index=pd.date_range("2026-11-02", periods=4))
+    chart = journey_chart(px, "2026-11-03", 105.0, "2026-11-05", 108.0)
+    assert len(chart.layer) >= 6
+    import streamlit as st
+    st.cache_data.clear()
+    at = _run("app_pages/this_month.py")
+    assert not at.exception, [e.message for e in at.exception]
+    assert any("How the leaving stocks did" in m.value for m in at.markdown)
+
+
+def test_journey_chart_formats_are_valid():
+    """A '₹' inside a number format breaks the chart (no date axis); it belongs in titles only."""
+    import json
+    import sys
+    sys.path.insert(0, "dashboard")
+    from common import journey_chart
+    px = pd.Series([100.0, 105, 110, 108], index=pd.date_range("2026-11-02", periods=4))
+    spec = json.dumps(journey_chart(px, "2026-11-03", 105.0, "2026-11-05", 108.0,
+                                    avg=px.rolling(2).mean()).to_dict())
+    import re
+    formats = re.findall(r'"format": "([^"]*)"', spec)
+    assert formats and all("₹" not in f and "\u20b9" not in f for f in formats)
+    assert '"padding"' not in spec       # custom padding cut off the date axis in Streamlit

@@ -250,8 +250,12 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
         lst.to_csv(out / f"list_{pf}.csv", index=False)
 
         rows = _change_rows(table, ch, {}, {})
-        pd.DataFrame(rows, columns=["action", "symbol", "reason", "qty", "price"]).to_csv(
-            out / f"changes_{pf}.csv", index=False)
+        for r in rows:  # when each stock entered the list, so the app can show how leavers did
+            e = prev_entries.get(r["symbol"], {}) if r["action"] == "SELL" else {}
+            r["added_on"] = e.get("added_on", as_of.isoformat() if r["action"] == "BUY" else None)
+            r["added_price"] = e.get("added_price", r["price"] if r["action"] == "BUY" else None)
+        pd.DataFrame(rows, columns=["action", "symbol", "reason", "qty", "price", "added_on",
+                                    "added_price"]).to_csv(out / f"changes_{pf}.csv", index=False)
 
         lines += [f"## {meta['label']} ({n} stocks from {meta['index_name']})", "",
                   f"Compared against: {basis}. {len(ch['sell'])} out, {len(ch['buy'])} in, "

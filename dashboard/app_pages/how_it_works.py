@@ -254,7 +254,7 @@ with tabs[5]:
 # ---- dashboard pages ----
 with tabs[6]:
     st.table({
-        ":material/event: This month": "The latest review: what to sell, what to buy, and why",
+        ":material/event: This month": "The latest review: what to sell, what to buy, and why, plus how each leaving stock did from the day it was added",
         ":material/analytics: Portfolio analysis": "Each current list with live price, fair value, valuation label, health, a detail card per stock, and the 3-year AI vs index chart",
         ":material/account_balance_wallet: My holdings & P&L": "Private. Your own moves this month, what you own, its value, profit or loss, and the value over time vs the index",
         ":material/edit_note: Log a trade": "Private. Record a buy or sell",

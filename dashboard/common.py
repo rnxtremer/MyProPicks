@@ -32,8 +32,8 @@ for _k, _env in (("token", "MYPROPICKS_GH_TOKEN"), ("repo", "MYPROPICKS_GH_REPO"
 from mypropicks import fundamentals, ledger, remote  # noqa: E402
 from mypropicks.config import DISCLAIMER, PORTFOLIOS, data_dir, load_config  # noqa: E402
 from mypropicks import prices as _prices  # noqa: E402
-from mypropicks.prices import get_prices, latest_quotes  # noqa: E402
-from mypropicks.review import latest_review, personal_changes  # noqa: E402
+from mypropicks.prices import get_prices, index_history, latest_quotes  # noqa: E402
+from mypropicks.review import latest_list_dir, latest_review, personal_changes  # noqa: E402
 
 
 
@@ -279,3 +279,97 @@ def my_moves(rev: Path, pf: str) -> tuple[pd.DataFrame | None, list[str]]:
     for c in ("qty", "price"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
     return df, warnings
+
+
+# ---- a stock's time in the list: from added to removed ----
+GAIN, LOSS, OUTSIDE = "#22C55E", "#EF4444", "#94A3B8"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def index_series(ticker: str, start: str) -> pd.Series:
+    return index_history(ticker, start)
+
+
+def leavers(rev: Path, pf: str) -> pd.DataFrame:
+    """This review's SELLs with when each entered the list and at what price. Older reviews
+    didn't save that, so it's looked up in the previous review's list."""
+    ch = load_review_file(str(rev), f"changes_{pf}.csv")
+    if ch is None or ch.empty:
+        return pd.DataFrame(columns=["symbol", "reason", "price", "added_on", "added_price"])
+    out = ch[ch["action"] == "SELL"].copy()
+    for c in ("added_on", "added_price"):
+        if c not in out:
+            out[c] = None
+    if out["added_on"].isna().any():
+        prev = latest_list_dir(pf, date.fromisoformat(rev.name))
+        if prev is not None:
+            pl = pd.read_csv(prev / f"list_{pf}.csv").set_index("symbol")
+            miss = out["added_on"].isna()
+            out.loc[miss, "added_on"] = out.loc[miss, "symbol"].map(pl["added_on"])
+            out.loc[miss, "added_price"] = out.loc[miss, "symbol"].map(pl["added_price"])
+    out["added_price"] = pd.to_numeric(out["added_price"], errors="coerce")
+    out["price"] = pd.to_numeric(out["price"], errors="coerce")
+    return out.reset_index(drop=True)
+
+
+def journey_chart(price: pd.Series, added_on, added_price: float, removed_on=None,
+                  removed_price: float | None = None, avg: pd.Series | None = None,
+                  height: int = 280):
+    """Price line with the stretch the stock spent in the list shaded (green if it gained, red
+    if it lost), and Added / Removed markers with their prices, like a trade journal."""
+    import altair as alt
+
+    price = price.dropna()
+
+    def trading_day(d):  # a review on a holiday used the last close before it
+        d = pd.Timestamp(d)
+        before = price.index[price.index <= d]
+        return before[-1] if len(before) else d
+
+    a0 = trading_day(added_on)
+    r0 = trading_day(removed_on) if removed_on is not None else price.index[-1]
+    end_price = removed_price if removed_price is not None else float(price.iloc[-1])
+    colour = GAIN if end_price >= added_price else LOSS
+    df = price.rename("Price").rename_axis("Date").reset_index()
+    held = df[(df["Date"] >= a0) & (df["Date"] <= r0)]
+    lo = min(float(price.min()), added_price, removed_price or added_price)
+    hi = max(float(price.max()), added_price, removed_price or added_price)
+    pad = (hi - lo) * 0.08 or hi * 0.02
+    scale = alt.Scale(domain=[lo - pad, hi + pad], zero=False, nice=False)
+    y = alt.Y("Price:Q", title=None, scale=scale)
+    x = alt.X("Date:T", title=None)
+    layers = [alt.Chart(df).mark_line(color=OUTSIDE, strokeWidth=1.3, opacity=0.7).encode(x=x, y=y)]
+    if len(held):
+        layers += [alt.Chart(held).mark_area(color=colour, opacity=0.15, clip=True).encode(
+                       x=x, y=y, y2=alt.datum(lo - pad)),     # shade down to the chart floor, not 0
+                   alt.Chart(held).mark_line(color=colour, strokeWidth=2).encode(x=x, y=y)]
+    if avg is not None:
+        a = avg.dropna().rename("Avg").rename_axis("Date").reset_index()
+        layers.append(alt.Chart(a).mark_line(color="#818CF8", strokeDash=[5, 4], strokeWidth=1.3)
+                      .encode(x=x, y=alt.Y("Avg:Q", title=None, scale=scale)))
+    marks = [{"Date": a0, "Price": float(added_price), "label": f"Added ₹{added_price:,.2f}",
+              "colour": GAIN, "kind": "added"}]
+    if removed_on is not None and removed_price is not None:
+        marks.append({"Date": r0, "Price": float(removed_price), "label": f"Removed ₹{removed_price:,.2f}",
+                      "colour": LOSS, "kind": "removed"})
+    m = pd.DataFrame(marks)
+    colours = alt.Color("colour:N", scale=None)
+    my = alt.Y("Price:Q", scale=scale)
+    top = int(m["Price"].idxmax())                # the higher dot gets its label above
+    layers += [
+        alt.Chart(m).mark_rule(strokeDash=[3, 3], opacity=0.6).encode(x="Date:T", color=colours),
+        alt.Chart(m).mark_point(filled=True, size=80, opacity=1).encode(x="Date:T", y=my, color=colours),
+        # Both labels sit to the left (the newest point is at the right edge); the higher price's
+        # label goes above its dot and the lower one's below, so they never overlap.
+        *[alt.Chart(m.iloc[[i]]).mark_text(align="right", dx=-8, fontWeight=600, fontSize=12,
+                                           dy=-14 if i == top else 18).encode(
+            x="Date:T", y=my, text="label:N", color=colours) for i in range(len(m))],
+    ]
+    # Hover: invisible points along the price line show the date and price.
+    layers.append(alt.Chart(df).mark_point(opacity=0, size=120).encode(
+        x=x, y=y, tooltip=[alt.Tooltip("Date:T", format="%d %b %Y"), alt.Tooltip("Price:Q", title="Price (₹)", format=",.2f")]))
+    return alt.layer(*layers).properties(height=height)
+
+
+def growth_line(ret: float, base: int = 10_000) -> str:
+    return f"₹{base:,} would have become about ₹{base * (1 + ret):,.0f}"

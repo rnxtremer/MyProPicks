@@ -1,6 +1,57 @@
+import pandas as pd
 import streamlit as st
 
-from common import PF_KEYS, PF_LABELS, PORTFOLIOS, current_review, footer, load_review_file
+from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, current_review, footer, growth_line, index_series,
+                    journey_chart, leavers, load_review_file, price_histories)
+from mypropicks.config import BENCHMARK_NAMES, BENCHMARKS
+
+
+def _day(d) -> str:
+    d = pd.Timestamp(d)
+    return f"{d.day} {d:%b %Y}"
+
+
+def leavers_report(pf: str) -> None:
+    """How each stock leaving the list did, from the day it was added to the day it left."""
+    out = leavers(rev, pf)
+    out = out[out["added_price"].notna() & out["price"].notna() & out["added_on"].notna()]
+    if out.empty:
+        return
+    st.markdown("**:material/receipt_long: How the leaving stocks did while in the list**")
+    removed_on = pd.Timestamp(rev.name)
+    hist = price_histories(tuple(out["symbol"]))
+    first = min(pd.Timestamp(a) for a in out["added_on"])
+    bench = index_series(BENCHMARKS[pf], str((first - pd.Timedelta(days=7)).date()))
+    for r in out.itertuples():
+        a0 = pd.Timestamp(r.added_on)
+        ret = r.price / r.added_price - 1
+        days = (removed_on - a0).days
+        with st.container(border=True):
+            badge = (f":green-badge[:material/trending_up: {ret:+.1%}]" if ret >= 0
+                     else f":red-badge[:material/trending_down: {ret:+.1%}]")
+            st.markdown(f"**{r.symbol}** {badge}")
+            left, right = st.columns([1, 2])
+            with left:
+                st.metric("Return in the list", f"{ret:+.1%}", border=True,
+                          help=f"Added {_day(a0)} at ₹{r.added_price:,.2f}, left {_day(removed_on)} "
+                               f"at ₹{r.price:,.2f} (last close before the review)")
+                st.caption(f"{growth_line(ret)} over {days} day{'s' if days != 1 else ''}.")
+                b = bench.dropna()
+                if len(b) and b.index[0] <= a0:
+                    b_ret = float(b.asof(removed_on)) / float(b.asof(a0)) - 1
+                    st.metric(f"{BENCHMARK_NAMES[pf]} over the same days", f"{b_ret:+.1%}",
+                              f"{(ret - b_ret) * 100:+.1f} pts vs index", border=True)
+                st.caption(f"Why it left: {r.reason}")
+            with right:
+                if r.symbol in hist:
+                    h = hist[r.symbol].dropna()
+                    h = h[(h.index >= a0 - pd.Timedelta(days=90)) & (h.index <= removed_on + pd.Timedelta(days=30))]
+                    if len(h) > 1:
+                        st.altair_chart(journey_chart(h, a0, float(r.added_price), removed_on, float(r.price),
+                                                      height=220),
+                                        alt=f"{r.symbol} price with the day it was added and the day it left")
+                else:
+                    st.caption("No price history.")
 
 st.title("This month's changes")
 
@@ -39,15 +90,16 @@ for pf in PF_KEYS:
         }
         with left:
             st.markdown(":red[**Sell**]")
-            sells = ch[ch["action"] == "SELL"].drop(columns="action")
+            sells = ch[ch["action"] == "SELL"].drop(columns=["action", "added_on", "added_price"], errors="ignore")
             if sells.empty:
                 st.caption("Nothing to sell.")
             else:
                 st.dataframe(sells, hide_index=True, column_config=cfg, alt=f"{PF_LABELS[pf]} sells")
         with right:
             st.markdown(":green[**Buy**]")
-            buys = ch[ch["action"] == "BUY"].drop(columns="action")
+            buys = ch[ch["action"] == "BUY"].drop(columns=["action", "added_on", "added_price"], errors="ignore")
             st.dataframe(buys, hide_index=True, column_config=cfg, alt=f"{PF_LABELS[pf]} buys")
+        leavers_report(pf)
 
 with st.expander("Full review summary"):
     st.markdown((rev / "summary.md").read_text(encoding="utf-8"))

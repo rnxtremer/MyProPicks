@@ -6,7 +6,7 @@ import streamlit as st
 
 from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, footer, fundamentals_raw,
                     load_backtest, load_review_file, price_histories, prices_note, quotes, snapshot_file,
-                    market_quotes, market_strip, with_live)
+                    growth_line, journey_chart, market_quotes, market_strip, with_live)
 from mypropicks.backtest import cagr
 from mypropicks.config import BENCHMARK_NAMES
 from mypropicks.fundamentals import quarterly_summary
@@ -95,6 +95,7 @@ for r in lst.itertuples():
         "day_chg": q.get(s, {}).get("change_pct"),
         "since_added": (ltp / r.added_price - 1) if ltp and r.added_price == r.added_price else None,
         "added_on": r.added_on,
+        "added_price": r.added_price,
         "fair_value": fv,
         "upside": (fv / ltp - 1) if has else None,
         "valuation": label,
@@ -347,12 +348,24 @@ if pick:
 
         c1, c2 = st.columns([2, 1])
         with c1:
-            st.markdown("**:material/show_chart: Price vs 200-day average**")
+            st.markdown("**:material/show_chart: Price since it was added**")
             if pick in hist:
-                h = hist[[pick]].dropna().rename(columns={pick: "Price"})
-                h["200-day average"] = h["Price"].rolling(200).mean()
-                st.line_chart(h.tail(252), height=280,
-                              alt=f"{pick} price over the last year with its 200-day average")
+                h = hist[pick].dropna()
+                avg = h.rolling(200).mean()
+                if pd.notna(row["added_price"]) and isinstance(row["added_on"], str):
+                    st.altair_chart(
+                        journey_chart(h.tail(252), row["added_on"], float(row["added_price"]),
+                                      avg=avg.tail(252)),
+                        alt=f"{pick} price over the last year, marked where it was added to the list")
+                    if pd.notna(row["since_added"]):
+                        a = pd.Timestamp(row["added_on"])
+                        st.caption(f"Added on **{a.day} {a:%b %Y}** at **₹{row['added_price']:,.2f}**. "
+                                   f"Since then: **{row['since_added']:+.1%}**, so "
+                                   f"{growth_line(row['since_added'])}. Shaded: time in the list "
+                                   "(green = up, red = down). Dashed: 200-day average.")
+                else:
+                    st.line_chart(pd.DataFrame({"Price": h, "200-day average": avg}).tail(252), height=280,
+                                  alt=f"{pick} price over the last year with its 200-day average")
             else:
                 st.caption("No price history.")
         with c2:

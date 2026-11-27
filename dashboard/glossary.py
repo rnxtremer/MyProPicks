@@ -200,7 +200,18 @@ TERMS: list[dict] = [
          high="Positive: the pick has worked so far.",
          low="Negative: it has fallen since it was picked.",
          good="Judge picks over months, not days; a few losers are normal in any portfolio.",
-         matters="Shows how each pick has done."),
+         matters="Shows how each pick has done. On a stock's price chart, the green dot marks the day it "
+                 "was added and the shaded stretch is its time in the list."),
+    dict(group="ranking", term="Return in the list",
+         what="How a stock did from the day it joined the AI's list to the day it left.",
+         how="Price when it left ÷ price when it was added − 1. Both are the last closing prices "
+             "before the review that added or removed it.",
+         high="Positive: the stock made money while the AI held it.",
+         low="Negative: it lost money while held.",
+         good="Compare it with the index over the same days: beating the index is what counts.",
+         matters="Shown for every stock leaving the list on the This month page, with a chart marking "
+                 "Added and Removed, and what ₹10,000 would have become.",
+         example="Added at ₹2,052, removed at ₹3,478: a return of +69.5%, so ₹10,000 became about ₹16,950."),
 
     # ======================= MOMENTUM =======================
     dict(group="momentum", term="12-month return (skipping the last month)", metric="mom_12_1",
