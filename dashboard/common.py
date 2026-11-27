@@ -31,6 +31,7 @@ for _k, _env in (("token", "MYPROPICKS_GH_TOKEN"), ("repo", "MYPROPICKS_GH_REPO"
 
 from mypropicks import fundamentals, ledger, remote  # noqa: E402
 from mypropicks.config import DISCLAIMER, PORTFOLIOS, data_dir, load_config  # noqa: E402
+from mypropicks import prices as _prices  # noqa: E402
 from mypropicks.prices import get_prices, latest_quotes  # noqa: E402
 from mypropicks.review import latest_review, personal_changes  # noqa: E402
 
@@ -153,6 +154,43 @@ def current_review() -> Path | None:
 @st.cache_data(ttl=300, show_spinner="Fetching live prices…")
 def quotes(symbols: tuple[str, ...]) -> dict[str, dict]:
     return latest_quotes(list(symbols))
+
+
+# Market strip on Portfolio analysis: (name, Yahoo ticker). GIFT Nifty isn't on Yahoo.
+MARKETS = [("Nifty 50", "^NSEI"), ("Sensex", "^BSESN"), ("Bank Nifty", "^NSEBANK"),
+           ("India VIX", "^INDIAVIX"), ("Nasdaq", "^IXIC"), ("S&P 500", "^GSPC")]
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def market_quotes() -> dict[str, dict]:
+    out = {}
+    for name, tk in MARKETS:
+        try:
+            q = _prices.live_ticker(tk)
+        except Exception:  # noqa: BLE001
+            q = None
+        if q:
+            out[name] = q
+    return out
+
+
+def market_strip() -> None:
+    """One row of index cards: level, day change and the time of the price."""
+    q = market_quotes()
+    if not q:
+        return
+    with st.container(horizontal=True, gap="small"):
+        for name, _ in MARKETS:
+            v = q.get(name)
+            if not v:
+                continue
+            chg = v.get("change_pct")
+            when = pd.Timestamp(v["as_of"]) if v.get("as_of") else None
+            st.metric(name, f"{v['ltp']:,.2f}", f"{chg:+.2%}" if chg is not None else None, border=True,
+                      delta_color="inverse" if name == "India VIX" else "normal",
+                      help=(f"As of {when.day} {when:%b}, {when:%H:%M} IST (about 15 minutes delayed). "
+                            + ("India VIX measures expected volatility: rising means more fear."
+                               if name == "India VIX" else "")) if when is not None else None)
 
 
 def with_live(hist: pd.DataFrame, q: dict[str, dict]) -> pd.DataFrame:

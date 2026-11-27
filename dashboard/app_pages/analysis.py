@@ -6,7 +6,7 @@ import streamlit as st
 
 from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, config, current_review, footer, fundamentals_raw,
                     load_backtest, load_review_file, price_histories, prices_note, quotes, snapshot_file,
-                    with_live)
+                    market_quotes, market_strip, with_live)
 from mypropicks.backtest import cagr
 from mypropicks.config import BENCHMARK_NAMES
 from mypropicks.fundamentals import quarterly_summary
@@ -24,6 +24,8 @@ with st.container(horizontal=True, vertical_alignment="bottom"):
     refresh = st.button("Refresh prices", icon=":material/refresh:")
 if refresh:
     quotes.clear()
+    market_quotes.clear()
+market_strip()
 
 rev = current_review()
 if rev is None:

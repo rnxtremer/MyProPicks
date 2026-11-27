@@ -148,3 +148,14 @@ def test_footer_next_review_and_links(fake_world):
     text = " ".join(m.value for m in at.markdown)
     assert "Next review" in text and "Explore" in text
     assert any("Rudra Narayan Das" in c.value and "github.com/rnxtremer" in c.value for c in at.caption)
+
+
+def test_market_strip_shows_indices(fake_world):
+    import streamlit as st
+    st.cache_data.clear()
+    at = _run("app_pages/analysis.py")
+    assert not at.exception
+    labels = [m.label for m in at.metric]
+    for name in ("Nifty 50", "Sensex", "Bank Nifty", "India VIX", "Nasdaq", "S&P 500"):
+        assert name in labels
+    assert any(m.value == "25,000.00" for m in at.metric)

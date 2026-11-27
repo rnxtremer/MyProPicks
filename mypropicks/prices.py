@@ -96,11 +96,16 @@ def index_history(ticker: str, start: str) -> pd.Series:
 
 
 def _live_one(symbol: str) -> dict | None:
-    """Yahoo's live price (about 15 minutes delayed) with its time and the previous close,
-    from one intraday request. None if Yahoo has nothing usable."""
+    """Live quote for an NSE stock symbol (see live_ticker)."""
+    return live_ticker(yahoo(symbol))
+
+
+def live_ticker(ticker: str) -> dict | None:
+    """Yahoo's live price for any ticker (about 15 minutes delayed) with its time in IST and the
+    previous close, from one intraday request. None if Yahoo has nothing usable."""
     import yfinance as yf
 
-    t = yf.Ticker(yahoo(symbol))
+    t = yf.Ticker(ticker)
     bars = t.history(period="1d", interval="5m")
     m = t.history_metadata or {}
     last, prev, when = m.get("regularMarketPrice"), m.get("chartPreviousClose") or m.get("previousClose"),         m.get("regularMarketTime")

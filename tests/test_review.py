@@ -87,6 +87,8 @@ def _install_fakes(monkeypatch, n=30, failing=("S05", "S11", "S23")):
 
     monkeypatch.setattr(prices, "_download_one", fake_px)
     monkeypatch.setattr(prices, "_live_one", lambda sym: None)  # no network: use the fake daily prices
+    monkeypatch.setattr(prices, "live_ticker", lambda t: {"ltp": 25000.0, "change_pct": -0.006,
+                                                          "as_of": "2026-11-27 11:03", "live": True})
 
     def fake_fund(sym, max_age_days=30):
         i = int(sym[1:])
