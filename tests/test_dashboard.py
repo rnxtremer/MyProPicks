@@ -202,3 +202,11 @@ def test_journey_chart_formats_are_valid():
     formats = re.findall(r'"format": "([^"]*)"', spec)
     assert formats and all("₹" not in f and "\u20b9" not in f for f in formats)
     assert '"padding"' not in spec       # custom padding cut off the date axis in Streamlit
+
+
+def test_this_month_says_replaced(fake_world):
+    at = _run("app_pages/this_month.py")
+    assert not at.exception
+    values = [m.value for m in at.metric]
+    assert not any(" in · " in v for v in values)
+    assert any(v.endswith("replaced") or v.endswith("added") or v == "No changes" for v in values)

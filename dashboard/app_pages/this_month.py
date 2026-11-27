@@ -68,8 +68,18 @@ for col, pf in zip(cols, PF_KEYS):
     ch = load_review_file(str(rev), f"changes_{pf}.csv")
     n_sell = int((ch["action"] == "SELL").sum()) if ch is not None else 0
     n_buy = int((ch["action"] == "BUY").sum()) if ch is not None else 0
-    col.metric(PF_LABELS[pf], f"{n_buy} in · {n_sell} out", border=True,
-               help=f"{PORTFOLIOS[pf]['n']} stocks from {PORTFOLIOS[pf]['index_name']}")
+    extra = n_buy - n_sell                    # only when the list was short of stocks
+    if ch is None:
+        value = "Not reviewed"
+    elif n_buy == 0:
+        value = "No changes"
+    elif n_sell == 0:
+        value = f"{n_buy} added"
+    else:
+        value = f"{n_sell} replaced" + (f" · {extra} added" if extra > 0 else "")
+    col.metric(PF_LABELS[pf], value, border=True,
+               help=f"{n_sell} stock(s) left the list and {n_buy} new one(s) took their place. "
+                    f"{PORTFOLIOS[pf]['n']} stocks from {PORTFOLIOS[pf]['index_name']}.")
 
 for pf in PF_KEYS:
     ch = load_review_file(str(rev), f"changes_{pf}.csv")
