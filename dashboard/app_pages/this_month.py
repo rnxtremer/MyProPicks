@@ -93,9 +93,9 @@ for pf in PF_KEYS:
             continue
         left, right = st.container(), st.container()   # stacked: the reasons need the full width
         cfg = {
-            "symbol": st.column_config.TextColumn("Stock"),
+            "symbol": st.column_config.TextColumn("Stock", width="small"),
             "reason": st.column_config.TextColumn("Why", width="large"),
-            "price": st.column_config.NumberColumn("Last close", format="₹%.2f"),
+            "price": st.column_config.NumberColumn("Last close", format="₹%.2f", width="small"),
         }
         with left:
             st.markdown(":red[**Sell**]")
