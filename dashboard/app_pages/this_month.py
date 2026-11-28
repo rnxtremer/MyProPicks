@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, current_review, footer, growth_line, index_series,
-                    journey_chart, leavers, load_review_file, price_histories)
+from common import (PF_KEYS, PF_LABELS, PORTFOLIOS, current_review, explained_changes, footer, growth_line,
+                    index_series, journey_chart, leavers, price_histories)
 from mypropicks.config import BENCHMARK_NAMES, BENCHMARKS
 
 
@@ -65,7 +65,7 @@ st.caption(f"Review date: **{rev.name}**. Prices are the closes before the revie
 
 cols = st.columns(3)
 for col, pf in zip(cols, PF_KEYS):
-    ch = load_review_file(str(rev), f"changes_{pf}.csv")
+    ch = explained_changes(str(rev), pf)
     n_sell = int((ch["action"] == "SELL").sum()) if ch is not None else 0
     n_buy = int((ch["action"] == "BUY").sum()) if ch is not None else 0
     extra = n_buy - n_sell                    # only when the list was short of stocks
@@ -82,7 +82,7 @@ for col, pf in zip(cols, PF_KEYS):
                     f"{PORTFOLIOS[pf]['n']} stocks from {PORTFOLIOS[pf]['index_name']}.")
 
 for pf in PF_KEYS:
-    ch = load_review_file(str(rev), f"changes_{pf}.csv")
+    ch = explained_changes(str(rev), pf)
     with st.container(border=True):
         st.subheader(PF_LABELS[pf])
         if ch is None:
@@ -91,10 +91,10 @@ for pf in PF_KEYS:
         if ch.empty:
             st.success("No changes this month. Keep the list as it is.")
             continue
-        left, right = st.columns(2)
+        left, right = st.container(), st.container()   # stacked: the reasons need the full width
         cfg = {
             "symbol": st.column_config.TextColumn("Stock"),
-            "reason": st.column_config.TextColumn("Why"),
+            "reason": st.column_config.TextColumn("Why", width="large"),
             "price": st.column_config.NumberColumn("Last close", format="₹%.2f"),
         }
         with left:

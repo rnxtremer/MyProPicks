@@ -216,3 +216,13 @@ def test_this_month_has_no_qty_column(fake_world):
     at = _run("app_pages/this_month.py")
     assert not at.exception
     assert all("qty" not in df.value.columns for df in at.dataframe)
+
+
+def test_this_month_reasons_are_plain_english(fake_world):
+    import streamlit as st
+    st.cache_data.clear()
+    at = _run("app_pages/this_month.py")
+    assert not at.exception
+    for df in at.dataframe:
+        if "reason" in df.value.columns:
+            assert not df.value["reason"].astype(str).str.match(r"^(dropped to )?rank \d").any()

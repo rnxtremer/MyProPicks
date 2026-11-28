@@ -29,7 +29,7 @@ for _k, _env in (("token", "MYPROPICKS_GH_TOKEN"), ("repo", "MYPROPICKS_GH_REPO"
     if _gh.get(_k):
         os.environ[_env] = str(_gh[_k])
 
-from mypropicks import fundamentals, ledger, remote  # noqa: E402
+from mypropicks import explain, fundamentals, ledger, remote  # noqa: E402
 from mypropicks.config import DISCLAIMER, PORTFOLIOS, data_dir, load_config  # noqa: E402
 from mypropicks import prices as _prices  # noqa: E402
 from mypropicks.prices import get_prices, index_history, latest_quotes  # noqa: E402
@@ -290,10 +290,31 @@ def index_series(ticker: str, start: str) -> pd.Series:
     return index_history(ticker, start)
 
 
+@st.cache_data(ttl=300)
+def explained_changes(folder: str, pf: str) -> pd.DataFrame | None:
+    """A review's changes with short plain-English reasons. Reviews saved before reasons were
+    written ("rank 17") get them worked out from that review's and the previous one's rankings."""
+    ch = load_review_file(folder, f"changes_{pf}.csv")
+    if ch is None or ch.empty:
+        return ch
+    rev = Path(folder)
+    rk = load_review_file(folder, f"rankings_{pf}.csv")
+    if rk is None:
+        return ch
+    rk = rk.set_index(rk.columns[0]) if rk.columns[0] in ("symbol", "Unnamed: 0") else rk
+    prev = None
+    prev_dir = latest_list_dir(pf, date.fromisoformat(rev.name))
+    if prev_dir is not None and (prev_dir / f"rankings_{pf}.csv").exists():
+        prev = pd.read_csv(prev_dir / f"rankings_{pf}.csv", index_col=0)
+    ch = ch.copy()
+    ch["reason"] = [explain.reason(r.action, r.symbol, rk, prev, r.reason) for r in ch.itertuples()]
+    return ch
+
+
 def leavers(rev: Path, pf: str) -> pd.DataFrame:
     """This review's SELLs with when each entered the list and at what price. Older reviews
     didn't save that, so it's looked up in the previous review's list."""
-    ch = load_review_file(str(rev), f"changes_{pf}.csv")
+    ch = explained_changes(str(rev), pf)
     if ch is None or ch.empty:
         return pd.DataFrame(columns=["symbol", "reason", "price", "added_on", "added_price"])
     out = ch[ch["action"] == "SELL"].copy()

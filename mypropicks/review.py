@@ -8,7 +8,7 @@ from typing import Callable
 
 import pandas as pd
 
-from . import fundamentals, ledger, prices, universe
+from . import explain, fundamentals, ledger, prices, universe
 from .config import DISCLAIMER, PORTFOLIOS, data_dir, load_config
 from .eligibility import check_eligibility
 from .fairvalue import fair_value, sector_medians
@@ -74,11 +74,14 @@ def decide_changes(ranked: pd.DataFrame, held: list[str], n: int, keep_within: i
         warnings.append(f"The portfolio held {len(held)} stocks, more than {n}.")
     return {"new_list": new_list, "sell": sell, "buy": buy, "keep": keep, "warnings": warnings}
 
-def _change_rows(table: pd.DataFrame, ch: dict, sell_qty: dict, buy_qty: dict) -> list[dict]:
+def _change_rows(table: pd.DataFrame, ch: dict, sell_qty: dict, buy_qty: dict,
+                 prev_table: pd.DataFrame | None = None) -> list[dict]:
+    """SELL/BUY rows with a short plain-English reason (see explain.py). `prev_table` is last
+    month's rankings, used to say what changed."""
     ltp = table["ltp"].to_dict()
-    rows = [{"action": "SELL", "symbol": s, "reason": r, "qty": sell_qty.get(s, ""),
-             "price": ltp.get(s, "")} for s, r in ch["sell"]]
-    rows += [{"action": "BUY", "symbol": s, "reason": f"rank {int(table.at[s, 'rank'])}",
+    rows = [{"action": "SELL", "symbol": s, "reason": explain.reason("SELL", s, table, prev_table, r),
+             "qty": sell_qty.get(s, ""), "price": ltp.get(s, "")} for s, r in ch["sell"]]
+    rows += [{"action": "BUY", "symbol": s, "reason": explain.reason("BUY", s, table, prev_table),
               "qty": buy_qty.get(s, ""), "price": ltp.get(s)} for s in ch["buy"]]
     return rows
 
@@ -229,11 +232,14 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
 
         prev_list = []
         prev_entries = {}
+        prev_table = None
         prev_dir = latest_list_dir(pf, as_of)
         if prev_dir:
             pl = pd.read_csv(prev_dir / f"list_{pf}.csv")
             prev_list = pl["symbol"].tolist()
             prev_entries = pl.set_index("symbol")[["added_on", "added_price"]].to_dict("index")
+            prev_rk = prev_dir / f"rankings_{pf}.csv"
+            prev_table = pd.read_csv(prev_rk, index_col=0) if prev_rk.exists() else None
         # The review is the model portfolio: it is compared with last month's list, never with
         # your trades or capital, because review results are saved to a public repo. Your own
         # moves and quantities are worked out by personal_changes(), shown on the holdings page.
@@ -249,7 +255,7 @@ def run_review(as_of: date | None = None, portfolios: list[str] | None = None,
         lst["added_price"] = [prev_entries.get(s, {}).get("added_price", ltp.get(s)) for s in lst["symbol"]]
         lst.to_csv(out / f"list_{pf}.csv", index=False)
 
-        rows = _change_rows(table, ch, {}, {})
+        rows = _change_rows(table, ch, {}, {}, prev_table)
         for r in rows:  # when each stock entered the list, so the app can show how leavers did
             e = prev_entries.get(r["symbol"], {}) if r["action"] == "SELL" else {}
             r["added_on"] = e.get("added_on", as_of.isoformat() if r["action"] == "BUY" else None)

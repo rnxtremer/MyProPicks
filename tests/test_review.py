@@ -145,7 +145,7 @@ def test_personal_changes_use_holdings_and_cash(tmp_data, monkeypatch):
     rows, warnings = review.personal_changes(table, ledger.load_trades(), "nifty20", 100000)
     sells = [r for r in rows if r["action"] == "SELL"]
     buys = [r for r in rows if r["action"] == "BUY"]
-    assert [(r["symbol"], r["reason"], r["qty"]) for r in sells] == [("OLDCO", "left universe", 5)]
+    assert [(r["symbol"], r["reason"], r["qty"]) for r in sells] == [("OLDCO", "Left the index", 5)]
     assert len(buys) == 20 and all(r["qty"] >= 0 for r in buys)
 
 
