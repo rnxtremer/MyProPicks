@@ -95,19 +95,18 @@ for pf in PF_KEYS:
         cfg = {
             "symbol": st.column_config.TextColumn("Stock"),
             "reason": st.column_config.TextColumn("Why"),
-            "qty": st.column_config.NumberColumn("Qty", format="%d"),
             "price": st.column_config.NumberColumn("Last close", format="₹%.2f"),
         }
         with left:
             st.markdown(":red[**Sell**]")
-            sells = ch[ch["action"] == "SELL"].drop(columns=["action", "added_on", "added_price"], errors="ignore")
+            sells = ch[ch["action"] == "SELL"].drop(columns=["action", "qty", "added_on", "added_price"], errors="ignore")
             if sells.empty:
                 st.caption("Nothing to sell.")
             else:
                 st.dataframe(sells, hide_index=True, column_config=cfg, alt=f"{PF_LABELS[pf]} sells")
         with right:
             st.markdown(":green[**Buy**]")
-            buys = ch[ch["action"] == "BUY"].drop(columns=["action", "added_on", "added_price"], errors="ignore")
+            buys = ch[ch["action"] == "BUY"].drop(columns=["action", "qty", "added_on", "added_price"], errors="ignore")
             st.dataframe(buys, hide_index=True, column_config=cfg, alt=f"{PF_LABELS[pf]} buys")
         leavers_report(pf)
 

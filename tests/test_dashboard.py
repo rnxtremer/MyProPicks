@@ -210,3 +210,9 @@ def test_this_month_says_replaced(fake_world):
     values = [m.value for m in at.metric]
     assert not any(" in · " in v for v in values)
     assert any(v.endswith("replaced") or v.endswith("added") or v == "No changes" for v in values)
+
+
+def test_this_month_has_no_qty_column(fake_world):
+    at = _run("app_pages/this_month.py")
+    assert not at.exception
+    assert all("qty" not in df.value.columns for df in at.dataframe)
