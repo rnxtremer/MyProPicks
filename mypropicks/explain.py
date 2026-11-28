@@ -1,27 +1,21 @@
-"""Short, plain-English reasons for the review's buys and sells, from the category scores.
+"""Short, concrete reasons for the review's buys and sells, quoting the numbers behind them.
 
-Scores are 0-100 percentiles within the index (higher is better). A buy is explained by its
-strongest categories and its gap to fair value; a sell by what weakened since last month (or,
-with no earlier review, by its weakest categories).
+Category scores are 0-100 percentiles within the index (higher is better). A buy is explained by
+the hard numbers behind its strongest categories plus its gap to fair value. A sell is explained
+by what changed since last month (fair value, price trend, overall score), or, with no earlier
+review, by its weakest numbers.
 """
 from __future__ import annotations
 
 import pandas as pd
 
 CATS = ["profitability", "growth", "cash_flow", "relative_value", "momentum"]
-STRONG = {"profitability": "highly profitable", "growth": "growing fast", "cash_flow": "strong cash flow",
-          "relative_value": "attractively priced", "momentum": "strong price trend"}
-IMPROVED = {"profitability": "profits improved", "growth": "growth picked up",
-            "cash_flow": "cash flow improved", "relative_value": "valuation improved",
-            "momentum": "price trend picked up"}
-WEAKENED = {"profitability": "profits weakened", "growth": "growth slowed", "cash_flow": "cash flow weakened",
-            "relative_value": "got pricier vs peers", "momentum": "price trend weakened"}
-WEAK = {"profitability": "low profitability", "growth": "weak growth", "cash_flow": "weak cash flow",
-        "relative_value": "looks expensive", "momentum": "weak price trend"}
 INELIGIBLE = {"low liquidity": "too little trading volume", "no price data": "no recent price data"}
 
 
-def _num(row: pd.Series, col: str) -> float | None:
+def _num(row: pd.Series | None, col: str) -> float | None:
+    if row is None:
+        return None
     v = row.get(col)
     try:
         v = float(v)
@@ -30,37 +24,97 @@ def _num(row: pd.Series, col: str) -> float | None:
     return None if v != v else v
 
 
-def _join(parts: list[str]) -> str:
-    parts = [p for p in parts if p]
-    if not parts:
-        return ""
-    text = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + "; " + parts[-1]
-    return text[0].upper() + text[1:]
+def _pct(x: float) -> str:
+    return f"{x:+.0%}"
 
 
-def _changes(row: pd.Series, prev: pd.Series | None) -> dict[str, float]:
-    if prev is None:
-        return {}
-    out = {}
-    for c in CATS:
-        a, b = _num(prev, c), _num(row, c)
-        if a is not None and b is not None:
-            out[c] = b - a
-    return out
+def _cap(text: str) -> str:
+    return text[0].upper() + text[1:] if text else text
+
+
+# ---- the numbers behind each category ----
+def _strength(cat: str, r: pd.Series) -> str | None:
+    g = lambda c: _num(r, c)  # noqa: E731
+    if cat == "profitability":
+        roe, om = g("roe"), g("op_margin")
+        bits = []
+        if roe is not None:
+            bits.append(f"ROE {roe:.0%}")
+        if om is not None:
+            bits.append(f"{om:.0%} operating margin")
+        return ", ".join(bits) or None
+    if cat == "growth":
+        rv, eps = g("rev_growth"), g("eps_growth")
+        bits = []
+        if rv is not None:
+            bits.append(f"sales {_pct(rv)}")
+        if eps is not None:
+            bits.append(f"EPS {_pct(eps)}")
+        return (", ".join(bits) + " last year") if bits else None
+    if cat == "cash_flow":
+        fy, ocf = g("fcf_yield"), g("ocf_to_np")
+        if fy is not None and fy >= 0.03:
+            return f"free cash flow yield {fy:.1%}"
+        if ocf is not None and ocf >= 1:
+            return f"cash earnings {ocf:.1f}× profit"
+        return None
+    if cat == "relative_value":
+        pe, pb = g("pe"), g("pb")
+        if pe is not None and pe > 0:
+            return f"cheap at P/E {pe:.1f}"
+        return f"cheap at P/B {pb:.1f}" if pb is not None else None
+    if cat == "momentum":
+        m6, v200 = g("mom_6"), g("vs_200dma")
+        if m6 is not None and m6 >= 0.05:
+            return f"price up {m6:.0%} in 6 months"
+        if v200 is not None and v200 > 0 and (m6 or 0) > 0:
+            return "price rising, above its 200-day average"
+        return None
+    return None
+
+
+def _weakness(cat: str, r: pd.Series) -> str | None:
+    g = lambda c: _num(r, c)  # noqa: E731
+    if cat == "profitability" and g("roe") is not None:
+        return f"low ROE ({g('roe'):.0%})"
+    if cat == "growth" and g("eps_growth") is not None:
+        return f"EPS {_pct(g('eps_growth'))} last year"
+    if cat == "cash_flow" and g("ocf_to_np") is not None:
+        return f"cash earnings only {g('ocf_to_np'):.1f}× profit"
+    if cat == "relative_value" and g("pe") is not None and g("pe") > 0:
+        return f"expensive at P/E {g('pe'):.0f}"
+    if cat == "momentum" and g("mom_6") is not None:
+        return f"price {_pct(g('mom_6'))} in 6 months"
+    return None
+
+
+def _fair_value_now(r: pd.Series) -> str | None:
+    up, fv = _num(r, "upside"), _num(r, "fair_value")
+    if up is None or fv is None:
+        return None
+    if up >= 0.05:
+        return f"{up:.0%} below fair value (₹{fv:,.0f})"
+    if up > -0.05:
+        return f"price now at fair value (₹{fv:,.0f})"
+    return f"price now {-up:.0%} above fair value (₹{fv:,.0f})"
 
 
 def buy_reason(row: pd.Series, prev: pd.Series | None = None) -> str:
     scores = {c: _num(row, c) for c in CATS}
-    best = sorted((c for c in CATS if scores[c] is not None and scores[c] >= 60),
-                  key=lambda c: -scores[c])[:2]
-    parts = [STRONG[c] for c in best]
-    up = _num(row, "upside")
-    if up is not None and up >= 0.10 and "relative_value" not in best:
-        parts.append(f"{up:.0%} below fair value")
-    rises = [c for c, d in sorted(_changes(row, prev).items(), key=lambda kv: -kv[1]) if d >= 5 and c not in best]
-    if rises and len(parts) < 3:
-        parts.append(IMPROVED[rises[0]])
-    return _join(parts[:3]) or "Strong all-round scores"
+    ranked = sorted((c for c in CATS if scores[c] is not None), key=lambda c: -scores[c])
+    cheap = (_num(row, "upside") or 0) >= 0.05
+    parts = []
+    for c in ranked:
+        if len(parts) == (1 if cheap else 2) or scores[c] < 55:
+            break
+        if c == "relative_value" and cheap:
+            continue                      # the fair-value gap says it better
+        s = _strength(c, row)
+        if s:
+            parts.append(s)
+    if cheap:
+        parts.append(_fair_value_now(row))
+    return _cap("; ".join(parts)) or "Strong all-round scores"
 
 
 def sell_reason(row: pd.Series | None, prev: pd.Series | None = None, old: str = "") -> str:
@@ -71,19 +125,34 @@ def sell_reason(row: pd.Series | None, prev: pd.Series | None = None, old: str =
         why = old.split(":", 1)[-1].strip()
         return f"No longer qualifies: {INELIGIBLE.get(why, why)}"
     if row is None:
-        return "Overtaken by stronger stocks"
-    falls = [c for c, d in sorted(_changes(row, prev).items(), key=lambda kv: kv[1]) if d <= -3]
-    parts = [WEAKENED[c] for c in falls[:2]]
-    if not parts:
+        return "Other stocks now score higher"
+    parts = []
+    up, pup = _num(row, "upside"), _num(prev, "upside")
+    fv, pfv = _num(row, "fair_value"), _num(prev, "fair_value")
+    if up is not None and pup is not None and pup - up >= 0.10 and fv and pfv:
+        where = (f"upside {up:.0%}, was {pup:.0%}" if up >= 0.05
+                 else "price now at it" if up > -0.05 else f"price now {-up:.0%} above it")
+        parts.append(f"fair value cut to ₹{fv:,.0f} from ₹{pfv:,.0f} ({where})")
+    elif up is not None and up < 0.05:
+        parts.append(_fair_value_now(row))
+    m6, pm6 = _num(row, "mom_6"), _num(prev, "mom_6")
+    if m6 is not None and pm6 is not None and pm6 - m6 >= 0.05:
+        parts.append(f"6-month return slipped to {_pct(m6)}")
+    if not parts:                          # no change to point at: name the weakest numbers
         scores = {c: _num(row, c) for c in CATS}
-        parts = [WEAK[c] for c in sorted((c for c in CATS if scores[c] is not None and scores[c] < 40),
-                                         key=lambda c: scores[c])[:2]]
-    up = _num(row, "upside")
-    if up is not None and up <= 0.05:
-        parts.append("near fair value" if up > -0.05 else "above fair value")
-    if len(parts) < 2:
-        parts.append("overtaken by stronger stocks")
-    return _join(parts[:3])
+        for c in sorted((c for c in CATS if scores[c] is not None), key=lambda c: scores[c])[:2]:
+            w = _weakness(c, row)
+            if w and scores[c] < 45:
+                parts.append(w)
+    if not parts:
+        parts.append("other stocks now score higher")
+    parts = [p for p in parts if p][:2]
+    sc, psc = _num(row, "score"), _num(prev, "score")
+    if sc is not None and psc is not None and psc - sc >= 0.5:
+        parts.append(f"score {psc:.0f} → {sc:.0f}")
+    elif len(parts) < 2 and "other stocks now score higher" not in parts:
+        parts.append("other stocks now score higher")
+    return _cap("; ".join(parts))
 
 
 def reason(action: str, symbol: str, table: pd.DataFrame, prev: pd.DataFrame | None = None,

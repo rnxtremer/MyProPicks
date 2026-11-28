@@ -173,10 +173,10 @@ with tabs[3]:
                 f"still within the buffer, so it's **kept**. If it had fallen to rank 35, the review "
                 f"would sell A (it fell below rank {keep_within(cfg, 'nifty20')}) and **BUY** the "
                 "highest-ranked stock you don't own.")
-    st.markdown("**The Why column** gives each change a short reason from the category scores: a buy "
-                "names its strengths (for example *Highly profitable, strong cash flow; 20% below fair "
-                "value*), a sell says what weakened since last month (for example *Got pricier vs peers; "
-                "overtaken by stronger stocks*), or why it no longer qualifies.")
+    st.markdown("**The Why column** quotes the numbers behind each change. A buy shows its strongest "
+                "facts, for example *ROE 95%, 47% operating margin; 9% below fair value (₹564)*. A sell "
+                "shows what changed since last month, for example *Fair value cut to ₹329 from ₹561 "
+                "(upside 19%, was 104%); score 59 → 58*, or why it no longer qualifies.")
     st.markdown("**What it compares against:** the review itself always compares with last month's "
                 "list, so the published lists are the model portfolio. **Your moves** on the "
                 "*My holdings & P&L* page compare the new list with the stocks you actually hold.")
